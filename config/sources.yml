@@ -1,0 +1,414 @@
+# ============================================================
+# Media Intelligence Hub — Configuración de fuentes
+# ============================================================
+# Edita este archivo para gestionar tus feeds sin tocar código.
+# Los scripts leen esta config y sincronizan con la tabla `sources`.
+
+rss_feeds:
+  # ── OOH / DOOH (priority: high) ────────────────────────────────────────────
+  - name: "Digital Signage Today"
+    url: "https://www.digitalsignagetoday.com/rss/"
+    active: true
+    priority: high
+    min_relevance: 0.60
+
+  - name: "OAAA (Out of Home)"
+    url: "https://oaaa.org/Blog/rss.aspx"
+    active: false             # 403 HTTPStatusError
+    priority: high
+    min_relevance: 0.60
+
+  - name: "OAAA Blog Feed"
+    url: "https://oaaa.org/blog/feed/"
+    active: true
+    priority: high
+    min_relevance: 0.60
+
+  - name: "Digital Signage Pulse"
+    url: "https://digitalsignagepulse.com/feed"
+    active: true
+    priority: high
+    min_relevance: 0.60
+
+  - name: "The Media Leader"
+    url: "https://uk.themedialeader.com/feed/"
+    active: true
+    priority: high
+    min_relevance: 0.60
+
+  - name: "Broadsign Blog"
+    url: "https://broadsign.com/blog/feed/"
+    active: false             # 403 HTTPStatusError — bloquea bots
+    priority: high
+    min_relevance: 0.60
+
+  - name: "Vistar Media Blog"
+    url: "https://vistarmedia.com/blog/feed/"
+    active: false             # 403 HTTPStatusError
+    priority: high
+    min_relevance: 0.60
+
+  # ── CTV / Streaming (priority: high) ───────────────────────────────────────
+  - name: "AdWeek"
+    url: "https://www.adweek.com/feed/"
+    active: true
+    priority: high
+    min_relevance: 0.60
+
+  - name: "AdExchanger"
+    url: "https://www.adexchanger.com/feed/"
+    active: true
+    priority: high
+    min_relevance: 0.60
+
+  - name: "ExchangeWire"
+    url: "https://www.exchangewire.com/feed/"
+    active: true              # URL corregida (antes apuntaba a prnewswire)
+    priority: high
+    min_relevance: 0.60
+
+  # ── AI / AdTech (priority: high) ───────────────────────────────────────────
+  - name: "VentureBeat AI"
+    url: "https://venturebeat.com/category/ai/feed/"
+    active: true
+    priority: high
+    min_relevance: 0.60
+
+  - name: "AI Business"
+    url: "https://aibusiness.com/feed/"
+    active: true
+    priority: high
+    min_relevance: 0.60
+
+  - name: "The Trade Desk Blog"
+    url: "https://www.thetradedesk.com/us/news/feed"
+    active: false             # 403 HTTPStatusError
+    priority: high
+    min_relevance: 0.60
+
+  # ── General Advertising (priority: medium) ─────────────────────────────────
+  - name: "Digiday"
+    url: "https://digiday.com/feed/"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "Marketing Dive"
+    url: "https://www.marketingdive.com/feeds/news/"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "MediaPost"
+    url: "https://www.mediapost.com/rss/"
+    active: false             # 403 HTTPStatusError
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "Ad Age"
+    url: "https://adage.com/rss"
+    active: false             # 403 HTTPStatusError — bloquea bots
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "The Drum"
+    url: "https://www.thedrum.com/rss/feed"
+    active: false             # 403 HTTPStatusError — bloquea bots
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "Campaign UK"
+    url: "https://www.campaignlive.co.uk/rss"
+    active: false             # 403 HTTPStatusError — bloquea bots
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "Marketing Week"
+    url: "https://www.marketingweek.com/feed/"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "IAB (Industry News)"
+    url: "https://www.iab.com/feed/"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "MarTech Series"
+    url: "https://martechseries.com/feed/"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "Think with Google"
+    url: "https://www.thinkwithgoogle.com/intl/en-gb/feed/"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "The Verge (AI)"
+    url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "Chief Martec"
+    url: "https://www.chiefmartec.com/feed"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "Nielsen Insights"
+    url: "https://www.nielsen.com/insights/feed/"
+    active: true              # URL corregida
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "Forrester Blog"
+    url: "https://www.forrester.com/blogs/rss/"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  # ── LatAm (priority: medium) ────────────────────────────────────────────────
+  - name: "Propmark (Brasil)"
+    url: "https://propmark.com.br/feed/"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "Meio & Mensagem (Brasil)"
+    url: "https://www.meioemensagem.com.br/feed"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "Revista InformaBTL (México)"
+    url: "https://www.informabtl.com/feed/"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "Portafolio (Colombia)"
+    url: "https://www.portafolio.co/rss/marketing"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "Adlatina"
+    url: "https://www.adlatina.com/rss"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  # ── Spain (priority: medium) ────────────────────────────────────────────────
+  - name: "MarketingDirecto"
+    url: "https://www.marketingdirecto.com/feed"
+    active: true
+    priority: high
+    min_relevance: 0.60
+
+  - name: "Reason Why"
+    url: "https://www.reasonwhy.es/feed"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "IPMARK"
+    url: "https://ipmark.com/feed/"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "El Observatorio Cetelem"
+    url: "https://elobservatoriocetelem.es/feed"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "El Publicista"
+    url: "https://elpublicista.es/feed"
+    active: false             # 403 HTTPStatusError
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "La Publicidad"
+    url: "https://lapublicidad.net/rss"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "Periódico Publicidad"
+    url: "https://periodicopublicidad.com/feed"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "IAB Spain"
+    url: "https://iabspain.es/feed/"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  # ── Europe (priority: medium) ───────────────────────────────────────────────
+  - name: "Stratégies"
+    url: "https://www.strategies.fr/feed"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "CB News"
+    url: "https://www.cbnews.fr/feed"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "W&V (Werben & Verkaufen)"
+    url: "https://www.wuv.de/rss/news"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  - name: "Horizont"
+    url: "https://www.horizont.net/rss/alle-news"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  # ── Consumer / Retail (priority: medium) ───────────────────────────────────
+  - name: "Food Retail"
+    url: "https://foodretail.es/rss"
+    active: true
+    priority: medium
+    min_relevance: 0.60
+
+  # ── Generic Marketing (priority: low — higher filter threshold) ─────────────
+  - name: "Campaign Asia"
+    url: "https://www.campaignasia.com/rss"
+    active: false             # 403 HTTPStatusError
+    priority: low
+    min_relevance: 0.70
+
+  - name: "Marketing Interactive"
+    url: "https://www.marketing-interactive.com/feed"
+    active: false             # 403 HTTPStatusError
+    priority: low
+    min_relevance: 0.70
+
+  - name: "AdAsia"
+    url: "https://adasia.net/feed/"
+    active: false             # 403 HTTPStatusError
+    priority: low
+    min_relevance: 0.70
+
+  - name: "Mumbrella"
+    url: "https://mumbrella.com.au/feed"
+    active: false             # 403 HTTPStatusError
+    priority: low
+    min_relevance: 0.70
+
+  - name: "B&T Magazine"
+    url: "https://www.bandt.com.au/feed"
+    active: true
+    priority: low
+    min_relevance: 0.70
+
+  - name: "Campaign Middle East"
+    url: "https://campaignme.com/feed/"
+    active: true
+    priority: low
+    min_relevance: 0.70
+
+  - name: "Communicate Online"
+    url: "https://www.communicate-mea.com/feed/"
+    active: false             # ConnectError — dominio no resuelve
+    priority: low
+    min_relevance: 0.70
+
+  - name: "eMarketer"
+    url: "https://www.emarketer.com/rss"
+    active: false             # 403 HTTPStatusError — paywalled
+    priority: low
+    min_relevance: 0.70
+
+  - name: "Gartner Insights"
+    url: "https://www.gartner.com/en/rss"
+    active: false             # 403 HTTPStatusError — paywalled
+    priority: low
+    min_relevance: 0.70
+
+  - name: "Retail TouchPoints"
+    url: "https://www.retailtouchpoints.com/feed"
+    active: false             # 403 HTTPStatusError
+    priority: low
+    min_relevance: 0.70
+
+  - name: "Chain Store Age"
+    url: "https://chainstoreage.com/rss.xml"
+    active: false             # 403 HTTPStatusError
+    priority: low
+    min_relevance: 0.70
+
+  - name: "adnews"
+    url: "https://www.adnews.com.au/feed"
+    active: false             # 403 HTTPStatusError
+    priority: low
+    min_relevance: 0.70
+
+  - name: "PR Newswire (Marketing)"
+    url: "https://www.prnewswire.com/rss/all-news-releases.xml"
+    active: false             # 403 HTTPStatusError — requiere autenticación
+    priority: low
+    min_relevance: 0.70
+
+  - name: "Consumer Affairs"
+    url: "https://www.consumeraffairs.com/rss"
+    active: false             # 403 HTTPStatusError
+    priority: low
+    min_relevance: 0.70
+
+  - name: "Kantar Media"
+    url: "https://www.kantarmedia.com/uk/rss"
+    active: false             # 403 HTTPStatusError
+    priority: low
+    min_relevance: 0.70
+
+  - name: "Forbes CMO Network"
+    url: "https://forbes.com/feed"
+    active: false             # 403 HTTPStatusError — bloquea bots
+    priority: low
+    min_relevance: 0.70
+
+google_trends:
+  keywords:
+    - ["OOH advertising", "DOOH", "digital signage", "outdoor advertising"]
+    - ["programmatic advertising", "ad tech", "RTB", "programmatic DOOH"]
+    - ["CTV advertising", "connected TV", "streaming ads", "Netflix ads"]
+    - ["AI advertising", "advertising automation", "generative AI marketing"]
+    - ["consumer behavior Spain", "comportamiento consumidor", "retail trends"]
+  geo: ES                      # Spain as primary market
+  timeframe: "now 7-d"
+
+gmail:
+  label: "media-hub"           # Etiqueta que usarás en Gmail para marcar emails
+  max_age_days: 7              # Solo procesar emails de los últimos N días
+
+gdrive:
+  folder_id: "1HzoDBQ0gVPf1kiUJrLYjY-gAtvVNLKcZ"
+  supported_types:
+    - "application/pdf"
+    - "text/plain"
+
+analysis:
+  model: "gpt-4o-mini"
+  embedding_model: "text-embedding-3-small"
+  min_relevance_threshold: 0.55    # Items con score menor se archivan
+  max_tokens_analysis: 1500
+  language: "es"               # Idioma de salida de los análisis
+
+linkedin:
+  default_format: "single_post"
+  hashtags_max: 5
+  post_max_chars: 3000
+  carousel_slides_max: 10

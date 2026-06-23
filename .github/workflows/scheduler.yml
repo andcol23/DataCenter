@@ -1,0 +1,215 @@
+name: DataCenter — Daily Pipeline
+
+on:
+  schedule:
+    # Solo días laborales (lun-vie). 06:25 UTC ≈ 08:25 España CEST (UTC+2) / 07:25 CET (UTC+1).
+    # Se evita el minuto 0 (donde GitHub encola con más retraso) y se adelanta la hora
+    # para que el email llegue muy antes de las 14:00 aunque el cron se retrase.
+    # El lunes el digest amplía la ventana de búsqueda para cubrir el fin de semana
+    # + la tarde del viernes (ver _lookback_hours_for_today en output/daily_digest.py).
+    - cron: "25 6 * * 1-5"
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run — analiza sin escribir en BD"
+        type: boolean
+        default: false
+
+env:
+  PYTHON_VERSION: "3.11"
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true && 'true' || 'false' }}
+  GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 1: RSS Fetcher
+  # ──────────────────────────────────────────────────────────────────────────
+  fetch-rss:
+    name: "RSS Fetcher"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run RSS Fetcher
+        env:
+          GOOGLE_CLIENT_ID:     ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          OPENAI_API_KEY:       ${{ secrets.OPENAI_API_KEY }}
+          DRY_RUN:              ${{ env.DRY_RUN }}
+          GITHUB_RUN_ID:        ${{ github.run_id }}
+        run: |
+          python -m ingestion.rss_fetcher 2>&1 | tee fetcher.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## RSS Fetcher" >> "$GITHUB_STEP_SUMMARY"
+          DONE=$(grep '"event": "rss_fetcher_done"' fetcher.log 2>/dev/null || true)
+          if [ -n "$DONE" ]; then
+            NEW=$(echo "$DONE" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('new',0))")
+            FOUND=$(echo "$DONE" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('found',0))")
+            echo "- Artículos encontrados: **${FOUND}**" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Nuevos guardados: **${NEW}**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Sin datos de resumen (ver log)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "- DRY_RUN: \`${{ env.DRY_RUN }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload fetcher log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fetcher-rss-log-${{ github.run_id }}
+          path: fetcher.log
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 2: Analyzer
+  # ──────────────────────────────────────────────────────────────────────────
+  analyze:
+    name: "OpenAI Analyzer"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: fetch-rss
+    if: needs.fetch-rss.result == 'success'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Analyzer
+        env:
+          GOOGLE_CLIENT_ID:     ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          OPENAI_API_KEY:       ${{ secrets.OPENAI_API_KEY }}
+          DRY_RUN:              ${{ env.DRY_RUN }}
+          BATCH_SIZE:           "10"
+          MAX_AGE_DAYS:         "7"
+          MAX_ITEMS_PER_RUN:    "60"
+          GITHUB_RUN_ID:        ${{ github.run_id }}
+        run: |
+          python -m analysis.analyzer 2>&1 | tee analyzer.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## OpenAI Analyzer" >> "$GITHUB_STEP_SUMMARY"
+          DONE=$(grep '"event": "analyzer_done"' analyzer.log 2>/dev/null || true)
+          if [ -n "$DONE" ]; then
+            OK=$(echo "$DONE"     | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('total_ok',0))")
+            FAIL=$(echo "$DONE"   | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('total_failed',0))")
+            BATCHES=$(echo "$DONE"| python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('batches',0))")
+            echo "- Analizados OK: **${OK}**" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Fallidos: **${FAIL}**" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Batches procesados: **${BATCHES}**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Sin datos de resumen (ver log)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "- DRY_RUN: \`${{ env.DRY_RUN }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload analyzer log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: analyzer-log-${{ github.run_id }}
+          path: analyzer.log
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 3: Daily Digest — envía el top 5 por email
+  # ──────────────────────────────────────────────────────────────────────────
+  send-digest:
+    name: "Send Daily Digest Email"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: analyze
+    if: always() && needs.analyze.result != 'cancelled'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Send Daily Digest
+        env:
+          GOOGLE_CLIENT_ID:     ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          DAILY_DIGEST_TO:      ${{ secrets.DAILY_DIGEST_TO }}
+          MAX_SHORTLIST:        "5"
+          DRY_RUN:              ${{ env.DRY_RUN }}
+        run: |
+          python -m output.daily_digest 2>&1 | tee digest.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## Daily Digest" >> "$GITHUB_STEP_SUMMARY"
+          cat digest.log >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload digest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-log-${{ github.run_id }}
+          path: digest.log
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 4: Resumen final del pipeline
+  # ──────────────────────────────────────────────────────────────────────────
+  summary:
+    name: "Pipeline Summary"
+    runs-on: ubuntu-latest
+    needs: [fetch-rss, analyze, send-digest]
+    if: always()
+
+    steps:
+      - name: Write summary
+        run: |
+          echo "## DataCenter Pipeline — Run [\`${{ github.run_id }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Job | Resultado |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-----------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| RSS Fetcher        | ${{ needs.fetch-rss.result }}   |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| OpenAI Analyzer    | ${{ needs.analyze.result }}     |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Daily Digest Email | ${{ needs.send-digest.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Trigger**: \`${{ github.event_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **DRY_RUN**: \`${{ env.DRY_RUN }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Hora UTC**: $(date -u '+%Y-%m-%d %H:%M')" >> "$GITHUB_STEP_SUMMARY"

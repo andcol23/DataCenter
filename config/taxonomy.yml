@@ -1,0 +1,406 @@
+# ============================================================
+# Media Intelligence Hub — Taxonomía de contenidos (v2)
+# ============================================================
+# Reescrita sobre los 7 macro-temas reales del perfil de André Colmenero
+# (andrecolmenero.com): foco en medios, Exterior digital (OOH/DOOH/pDOOH),
+# tecnología y su aplicación publicitaria, AI, automatización, data y consumo.
+#
+# Reemplaza la taxonomía "EQOIC Labs" anterior.
+#
+# Patrón de slug: minúsculas, guiones, sin acentos, singular cuando sea posible.
+# El analyzer clasifica cada item eligiendo primary_slug + secondary_slug
+# del catálogo, y normaliza keywords con formato {keyword_type}/{keyword_slug}.
+# ============================================================
+
+version: 2
+
+slug_rules:
+  - lowercase
+  - hyphens_not_underscores
+  - no_accents
+  - singular_preferred
+
+# Mercado núcleo de André. El analyzer usa esto para calibrar relevancia:
+# lo que toca estos temas es señal; lo que no, es periferia.
+market_focus:
+  core:
+    - ooh
+    - dooh
+    - pdooh
+    - digital-signage
+    - programmatic
+    - media-planning
+    - omnichannel
+    - adtech
+    - martech
+    - ai-advertising
+    - retail-media
+    - audience-measurement
+    - dco
+  context:
+    - consumer-behavior
+    - ctv
+    - streaming
+    - creative
+    - data
+    - automation
+    - saas
+    - market-research
+  # Temas que el sistema antiguo dejaba colar y que aquí son ruido salvo
+  # ángulo publicitario explícito.
+  peripheral:
+    - renewable-energy
+    - blockchain
+    - crypto
+    - iot-industrial
+    - cybersecurity
+    - hybrid-cloud
+    - generic-finance
+
+keyword_types:
+  company:   "Empresa o marca (jcdecaux, broadsign, netflix, nielsen)"
+  platform:  "Plataforma o producto digital (vistar, viooh, google-ads, meta-ads)"
+  channel:   "Canal de comunicación o distribución (ooh, dooh, pdooh, ctv, programmatic)"
+  tech:      "Tecnología o infraestructura (dco, dsp, ssp, clean-room, ai-max, cookieless)"
+  metric:    "KPI o métrica (brand-lift, ad-recall, footfall, roas, purchase-intent)"
+  format:    "Formato de contenido o publicidad (carousel, video, dooh, anamorphic)"
+  geo:       "Geografía o mercado (spain, latam, emea, brazil, mexico)"
+  audience:  "Segmento o perfil (cmo, gen-z, shopper, advertiser, planner)"
+  trend:     "Tendencia o movimiento (cookieless, retail-media, omnichannel, ai-first)"
+  study:     "Estudio o informe (nielsen-report, iab-study, kantar-survey, oaaa-study)"
+  index:     "Índice de mercado (adspend, consumer-confidence-index, cpi)"
+
+primaries:
+
+  # ── 1 ─────────────────────────────────────────────────────────────────────
+  - slug: media-advertising
+    label: "Media & Advertising"
+    description: "Ecosistema de medios y publicidad: Exterior (OOH/DOOH/pDOOH), CTV, programática, planificación y compra de medios"
+    priority: true
+    secondaries:
+      - slug: ooh-dooh
+        label: "OOH / DOOH / pDOOH"
+        keywords_example:
+          - channel/ooh
+          - channel/dooh
+          - channel/pdooh
+          - format/digital-signage
+          - company/jcdecaux
+          - company/broadsign
+          - company/clear-channel
+          - metric/ad-recall
+          - metric/footfall
+      - slug: programmatic
+        label: "Programática"
+        keywords_example:
+          - channel/programmatic
+          - tech/dsp
+          - tech/ssp
+          - channel/pdooh
+          - platform/vistar
+          - platform/viooh
+          - metric/cpm
+      - slug: media-planning
+        label: "Media Planning & Buying"
+        keywords_example:
+          - trend/cross-media
+          - trend/omnichannel
+          - metric/reach
+          - metric/frequency
+          - audience/planner
+          - metric/grp
+      - slug: streaming-ctv
+        label: "Streaming & CTV"
+        keywords_example:
+          - channel/ctv
+          - company/netflix
+          - company/disney
+          - trend/ad-tier
+          - metric/avod
+      - slug: social-platforms
+        label: "Social & Digital Platforms"
+        keywords_example:
+          - platform/tiktok
+          - platform/meta
+          - platform/youtube
+          - platform/linkedin
+          - trend/short-video
+      - slug: industry-news
+        label: "Mercado Publicitario (agencias, campañas, premios)"
+        keywords_example:
+          - trend/agency-news
+          - trend/account-move
+          - trend/award
+          - trend/campaign-launch
+          - geo/spain
+          - audience/cmo
+
+  # ── 2 ─────────────────────────────────────────────────────────────────────
+  - slug: tech-innovation
+    label: "Tech & Innovation"
+    description: "Tecnología pura y aplicada a publicidad: IA, automatización, SaaS, adtech/martech, datos y privacidad"
+    priority: true
+    secondaries:
+      - slug: ai-advertising
+        label: "IA aplicada a publicidad"
+        keywords_example:
+          - tech/generative-ai
+          - tech/ai-max
+          - trend/ai-first
+          - tech/dco
+          - trend/ai-creative
+          - company/openai
+      - slug: automation-saas
+        label: "Automatización & SaaS"
+        keywords_example:
+          - trend/automation
+          - trend/no-code
+          - trend/saas
+          - trend/agentic-ai
+          - tech/workflow-automation
+      - slug: adtech
+        label: "AdTech"
+        keywords_example:
+          - tech/dsp
+          - tech/ssp
+          - tech/header-bidding
+          - company/the-trade-desk
+          - channel/programmatic
+      - slug: martech
+        label: "MarTech"
+        keywords_example:
+          - tech/cdp
+          - tech/crm
+          - company/salesforce
+          - company/adobe
+          - trend/martech-stack
+      - slug: data-privacy
+        label: "Data & Privacy"
+        keywords_example:
+          - trend/cookieless
+          - tech/clean-room
+          - tech/identity-resolution
+          - trend/first-party-data
+          - tech/privacy-sandbox
+      - slug: emerging-tech
+        label: "Tecnología emergente (ángulo publicitario)"
+        keywords_example:
+          - tech/ar
+          - tech/dco
+          - tech/computer-vision
+          - trend/spatial-computing
+          - trend/digital-twins
+
+  # ── 3 ─────────────────────────────────────────────────────────────────────
+  - slug: consumer-behavior
+    label: "Consumer Behavior"
+    description: "Comportamiento, percepción y expectativas del consumidor frente a marcas, medios y publicidad"
+    secondaries:
+      - slug: ad-perception
+        label: "Percepción publicitaria"
+        keywords_example:
+          - metric/ad-recall
+          - metric/ad-avoidance
+          - trend/ad-blocking
+          - metric/intrusiveness
+          - metric/trust
+      - slug: personalization
+        label: "Personalización & Expectativas"
+        keywords_example:
+          - trend/personalization
+          - metric/purchase-intent
+          - trend/relevance
+          - audience/consumer
+      - slug: trust-influence
+        label: "Confianza & Influencia"
+        keywords_example:
+          - trend/influencer-trust
+          - trend/recommendations
+          - trend/social-proof
+          - metric/brand-trust
+      - slug: sustainability
+        label: "Sostenibilidad & Valores"
+        keywords_example:
+          - trend/sustainability
+          - trend/conscious-consumption
+          - metric/brand-loyalty
+          - audience/gen-z
+      - slug: media-consumption
+        label: "Consumo de medios"
+        keywords_example:
+          - metric/media-consumption
+          - metric/screen-time
+          - trend/streaming-consumption
+          - audience/youth
+
+  # ── 4 ─────────────────────────────────────────────────────────────────────
+  - slug: creative-content
+    label: "Creative & Content"
+    description: "Estrategia creativa, formatos, storytelling y producción de contenido publicitario"
+    secondaries:
+      - slug: creative-strategy
+        label: "Estrategia creativa"
+        keywords_example:
+          - trend/creative-optimization
+          - trend/storytelling
+          - trend/brand-platform
+          - metric/creative-effectiveness
+      - slug: formats
+        label: "Formatos publicitarios"
+        keywords_example:
+          - format/video
+          - format/dooh
+          - format/anamorphic
+          - format/interactive-ooh
+          - format/short-video
+      - slug: dco
+        label: "DCO & Creatividad dinámica"
+        keywords_example:
+          - tech/dco
+          - trend/dynamic-creative
+          - tech/creative-automation
+          - trend/personalized-creative
+      - slug: video
+        label: "Vídeo"
+        keywords_example:
+          - format/video
+          - metric/video-effectiveness
+          - trend/short-video
+          - channel/ctv
+      - slug: creator-economy
+        label: "Creator Economy"
+        keywords_example:
+          - trend/creator-economy
+          - trend/influencer-marketing
+          - format/ugc
+          - audience/creator
+
+  # ── 5 ─────────────────────────────────────────────────────────────────────
+  - slug: market
+    label: "Market"
+    description: "Resultados de mercado, inversión publicitaria, negocio, M&A, regulación y previsiones"
+    secondaries:
+      - slug: adspend
+        label: "Inversión publicitaria"
+        keywords_example:
+          - metric/adspend
+          - trend/forecast
+          - company/magna
+          - company/zenith
+          - index/adspend
+      - slug: business-strategy
+        label: "Negocio & Estrategia"
+        keywords_example:
+          - trend/holding-company
+          - metric/revenue
+          - trend/quarterly-results
+          - audience/investor
+      - slug: ma-deals
+        label: "M&A & Partnerships"
+        keywords_example:
+          - trend/merger
+          - trend/acquisition
+          - trend/partnership
+          - company/omnicom
+      - slug: regulation
+        label: "Regulación & Política"
+        keywords_example:
+          - trend/regulation
+          - trend/antitrust
+          - tech/gdpr
+          - tech/dsa
+          - geo/eu
+      - slug: forecasting
+        label: "Previsiones & Tendencias macro"
+        keywords_example:
+          - trend/market-outlook
+          - trend/forecast
+          - index/consumer-confidence-index
+          - trend/macro-trend
+
+  # ── 6 ─────────────────────────────────────────────────────────────────────
+  - slug: retail
+    label: "Retail"
+    description: "Retail media, shopper marketing, ecommerce, omnicanalidad y comercio"
+    secondaries:
+      - slug: retail-media
+        label: "Retail Media"
+        keywords_example:
+          - trend/retail-media
+          - company/amazon
+          - platform/amazon-ads
+          - channel/in-store-media
+          - metric/sales-lift
+      - slug: shopper-marketing
+        label: "Shopper Marketing"
+        keywords_example:
+          - metric/purchase-intent
+          - metric/basket-size
+          - trend/path-to-purchase
+          - channel/in-store-media
+      - slug: ecommerce
+        label: "eCommerce"
+        keywords_example:
+          - metric/conversion-rate
+          - trend/social-commerce
+          - trend/live-shopping
+          - metric/cart-abandonment
+      - slug: omnichannel-retail
+        label: "Omnicanalidad & Comercio"
+        keywords_example:
+          - trend/phygital
+          - trend/unified-commerce
+          - channel/click-and-collect
+          - trend/store-as-media
+      - slug: in-store-media
+        label: "In-Store & Place-Based Media"
+        keywords_example:
+          - channel/in-store-media
+          - channel/mall-media
+          - format/digital-signage
+          - trend/retail-media-network
+
+  # ── 7 ─────────────────────────────────────────────────────────────────────
+  - slug: measurement-data
+    label: "Measurement & Data"
+    description: "Medición de audiencias, atribución, efectividad publicitaria e investigación de mercado"
+    secondaries:
+      - slug: audience-measurement
+        label: "Medición de audiencias"
+        keywords_example:
+          - metric/impressions
+          - metric/reach
+          - metric/frequency
+          - company/nielsen
+          - company/route
+          - tech/mobility-data
+      - slug: attribution
+        label: "Atribución & Efectividad"
+        keywords_example:
+          - tech/attribution
+          - tech/mmm
+          - metric/incrementality
+          - metric/roas
+          - metric/brand-lift
+      - slug: brand-tracking
+        label: "Brand Tracking"
+        keywords_example:
+          - metric/brand-health
+          - metric/brand-awareness
+          - metric/nps
+          - metric/brand-preference
+      - slug: market-research
+        label: "Market Research"
+        keywords_example:
+          - company/kantar
+          - company/ipsos
+          - company/nielsen
+          - study/survey
+          - metric/sample-size
+      - slug: data-quality
+        label: "Calidad del dato & Metodología"
+        keywords_example:
+          - trend/data-quality
+          - tech/panel-data
+          - study/methodology
+          - metric/confidence
