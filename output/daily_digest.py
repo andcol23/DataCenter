@@ -102,7 +102,6 @@ def _gmail_service() -> Any:
         token_uri="https://oauth2.googleapis.com/token",
         client_id=os.environ["GOOGLE_CLIENT_ID"],
         client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
-        scopes=GMAIL_SCOPES,
     )
     creds.refresh(Request())
     return build("gmail", "v1", credentials=creds)

@@ -234,7 +234,6 @@ def get_spreadsheet():
         token_uri="https://oauth2.googleapis.com/token",
         client_id=os.environ["GOOGLE_CLIENT_ID"].strip(),
         client_secret=os.environ["GOOGLE_CLIENT_SECRET"].strip(),
-        scopes=_SHEETS_SCOPES,
     )
     gc = gspread.authorize(creds)
     return gc.open_by_key(sheet_id)
