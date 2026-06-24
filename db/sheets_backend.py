@@ -31,16 +31,22 @@ SCHEMAS: dict[str, dict[str, Any]] = {
     },
     "analyzed_items": {
         "columns": [
-            "created_at", "analyzed_at", "title", "summary", "key_insights",
-            "primary_slug", "secondary_slug", "url", "keywords",
-            "relevance_score", "novelty_score",
-            "id", "raw_item_id", "model_used", "tokens_used", "raw_analysis",
-            "updated_at",
+            "analyzed_at", "created_at", "relevance_score", "primary_slug",
+            "topics", "key_insights", "summary", "linkedin_angle",
+            "secondary_slug", "sentiment", "content_type", "entities", "url",
+            "target_audience", "updated_at", "raw_analysis", "model_used",
+            "tokens_used", "id", "raw_item_id", "keywords",
+            "kpi_primary_value", "kpi_primary_unit", "kpi_primary_claim",
+            "source_link", "narrative_type", "data_strength",
+            "brand_relevance", "novelty_score",
         ],
-        "json_arr": {"key_insights", "keywords"},
+        "json_arr": {"topics", "key_insights", "entities", "keywords"},
         "json_obj": {"raw_analysis"},
         "ints": {"tokens_used"},
-        "floats": {"relevance_score", "novelty_score"},
+        "floats": {
+            "relevance_score", "novelty_score", "data_strength",
+            "kpi_primary_value",
+        },
     },
 }
 
@@ -149,8 +155,8 @@ def deserialize_cell(table: str, col: str, value: Any) -> Any:
     return value
 
 
-def row_to_values(table: str, row: dict[str, Any]) -> list[Any]:
-    cols = SCHEMAS[table]["columns"]
+def row_to_values(table: str, row: dict[str, Any], columns: list[str] | None = None) -> list[Any]:
+    cols = columns or SCHEMAS[table]["columns"]
     return [serialize_cell(table, c, row.get(c)) for c in cols]
 
 
@@ -300,6 +306,7 @@ class _Store:
     def __init__(self, spreadsheet):
         self.ss = spreadsheet
         self._ws: dict[str, Any] = {}
+        self._headers: dict[str, list[str]] = {}
         self._records: dict[str, list[dict[str, Any]]] = {}
         self._rownums: dict[str, list[int]] = {}
 
@@ -327,6 +334,7 @@ class _Store:
             for row in row_data
         ]
         header = values[0] if values else []
+        self._headers[table] = [str(col) for col in header]
         recs: list[dict[str, Any]] = []
         rownums: list[int] = []
         for i, row in enumerate(values[1:]):
@@ -357,7 +365,7 @@ class _Store:
                     {
                         "values": [
                             _value_to_cell(value)
-                            for value in row_to_values(table, row)
+                            for value in row_to_values(table, row, self._headers.get(table))
                         ]
                     }
                 ],
