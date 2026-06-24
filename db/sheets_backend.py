@@ -344,66 +344,65 @@ class _Store:
             self._load(table)
         return self._records[table]
 
-    def append(self, table: str, row: dict[str, Any]) -> dict[str, Any]:
-        recs = self.records(table)
+    def _row_update_request(self, table: str, rownum: int, row: dict[str, Any]) -> dict[str, Any]:
         ws = self.worksheet(table)
-        rownum = len(recs) + 2
-        self.ss.batch_update(
-            {
-                "requests": [
+        return {
+            "updateCells": {
+                "start": {
+                    "sheetId": ws.id,
+                    "rowIndex": rownum - 1,
+                    "columnIndex": 0,
+                },
+                "rows": [
                     {
-                        "updateCells": {
-                            "start": {
-                                "sheetId": ws.id,
-                                "rowIndex": rownum - 1,
-                                "columnIndex": 0,
-                            },
-                            "rows": [
-                                {
-                                    "values": [
-                                        _value_to_cell(value)
-                                        for value in row_to_values(table, row)
-                                    ]
-                                }
-                            ],
-                            "fields": "userEnteredValue",
-                        }
+                        "values": [
+                            _value_to_cell(value)
+                            for value in row_to_values(table, row)
+                        ]
                     }
                 ],
+                "fields": "userEnteredValue",
             }
+        }
+
+    def _write_rows(self, table: str, rows: list[tuple[int, dict[str, Any]]]) -> None:
+        if not rows:
+            return
+        ws = self.worksheet(table)
+        max_row = max(rownum for rownum, _ in rows)
+        requests: list[dict[str, Any]] = []
+        new_row_count = None
+        if max_row > ws.row_count:
+            new_row_count = max_row
+            requests.append(
+                {
+                    "appendDimension": {
+                        "sheetId": ws.id,
+                        "dimension": "ROWS",
+                        "length": max_row - ws.row_count,
+                    }
+                }
+            )
+        requests.extend(
+            self._row_update_request(table, rownum, row)
+            for rownum, row in rows
         )
+        self.ss.batch_update({"requests": requests})
+        if new_row_count is not None:
+            ws._properties.setdefault("gridProperties", {})["rowCount"] = new_row_count
+
+    def append(self, table: str, row: dict[str, Any]) -> dict[str, Any]:
+        recs = self.records(table)
+        rownum = len(recs) + 2
+        self._write_rows(table, [(rownum, row)])
         recs.append(dict(row))
         self._rownums[table].append(rownum)
         return dict(row)
 
     def update_at(self, table: str, idx: int, row: dict[str, Any]) -> dict[str, Any]:
         recs = self.records(table)
-        ws = self.worksheet(table)
         rownum = self._rownums[table][idx]
-        self.ss.batch_update(
-            {
-                "requests": [
-                    {
-                        "updateCells": {
-                            "start": {
-                                "sheetId": ws.id,
-                                "rowIndex": rownum - 1,
-                                "columnIndex": 0,
-                            },
-                            "rows": [
-                                {
-                                    "values": [
-                                        _value_to_cell(value)
-                                        for value in row_to_values(table, row)
-                                    ]
-                                }
-                            ],
-                            "fields": "userEnteredValue",
-                        }
-                    }
-                ],
-            }
-        )
+        self._write_rows(table, [(rownum, row)])
         recs[idx] = dict(row)
         return dict(row)
 
@@ -561,10 +560,16 @@ class _Query:
     def _do_insert(self) -> _Result:
         payloads = self._payload if isinstance(self._payload, list) else [self._payload]
         out = []
+        writes: list[tuple[int, dict[str, Any]]] = []
+        recs = self.store.records(self.table)
         for p in payloads:
             row = self._prepare_new(p)
-            self.store.append(self.table, row)
+            rownum = len(recs) + len(out) + 2
+            writes.append((rownum, row))
             out.append(row)
+        self.store._write_rows(self.table, writes)
+        self.store._records[self.table].extend(dict(row) for row in out)
+        self.store._rownums[self.table].extend(rownum for rownum, _ in writes)
         return _Result(out)
 
     def _find_indices(self, predicate) -> list[int]:
@@ -574,6 +579,7 @@ class _Query:
         recs = self.store.records(self.table)
         cols = SCHEMAS[self.table]["columns"]
         updated = []
+        writes: list[tuple[int, dict[str, Any]]] = []
         for i, r in enumerate(recs):
             if all(_matches(r, c, op, v) for c, op, v in self._filters):
                 new = dict(r)
@@ -581,8 +587,12 @@ class _Query:
                 if "updated_at" in cols:
                     new["updated_at"] = _now_iso()
                 new = {c: new.get(c) for c in cols}
-                self.store.update_at(self.table, i, new)
+                if new == r:
+                    continue
+                writes.append((self.store._rownums[self.table][i], new))
+                recs[i] = dict(new)
                 updated.append(new)
+        self.store._write_rows(self.table, writes)
         return _Result(updated)
 
     def _conflict_key(self, row: dict[str, Any]) -> tuple:
@@ -599,24 +609,35 @@ class _Query:
             existing[self._conflict_key(r)] = i
 
         out = []
+        writes: list[tuple[int, dict[str, Any]]] = []
+        appended: list[tuple[int, dict[str, Any]]] = []
         for p in payloads:
             key = self._conflict_key(p)
             if key in existing:
                 if self._ignore_duplicates:
-                    continue  # supabase devuelve vacío para filas ignoradas
+                    continue
                 idx = existing[key]
                 merged = dict(recs[idx])
                 merged.update(p)
+                merged = {c: merged.get(c) for c in cols}
+                if merged == recs[idx]:
+                    continue
                 if "updated_at" in cols:
                     merged["updated_at"] = _now_iso()
                 merged = {c: merged.get(c) for c in cols}
-                self.store.update_at(self.table, idx, merged)
+                writes.append((self.store._rownums[self.table][idx], merged))
+                recs[idx] = dict(merged)
                 out.append(merged)
             else:
                 row = self._prepare_new(p)
-                self.store.append(self.table, row)
-                existing[self._conflict_key(row)] = len(recs) - 1
+                rownum = len(recs) + len(appended) + 2
+                writes.append((rownum, row))
+                appended.append((rownum, row))
+                existing[self._conflict_key(row)] = len(recs) + len(appended) - 1
                 out.append(row)
+        self.store._write_rows(self.table, writes)
+        recs.extend(dict(row) for _, row in appended)
+        self.store._rownums[self.table].extend(rownum for rownum, _ in appended)
         return _Result(out)
 
     def _do_select(self) -> _Result:

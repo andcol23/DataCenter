@@ -97,6 +97,21 @@ def upsert_raw_item(db: Client, item: RawItem) -> dict[str, Any] | None:
     return result.data[0] if result.data else None
 
 
+def upsert_raw_items(db: Client, items: list[RawItem]) -> list[dict[str, Any]]:
+    if not items:
+        return []
+    result = (
+        db.table("raw_items")
+        .upsert(
+            [item.to_db_dict() for item in items],
+            on_conflict="source_id,external_id",
+            ignore_duplicates=True,
+        )
+        .execute()
+    )
+    return result.data or []
+
+
 def get_raw_items_pending_analysis(
     db: Client, limit: int = 50, max_age_days: int = 7
 ) -> list[dict[str, Any]]:

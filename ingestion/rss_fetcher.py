@@ -19,7 +19,7 @@ from db.client import (
     RawItem,
     get_client,
     log_fetch,
-    upsert_raw_item,
+    upsert_raw_items,
     upsert_source,
 )
 
@@ -138,6 +138,7 @@ def process_feed(source_config: dict[str, Any], db: Any, source_row: dict[str, A
     stats["found"] = len(entries)
     log.info("entries_found", source=name, count=len(entries))
 
+    pending_items: list[RawItem] = []
     for entry in entries:
         try:
             external_id = entry_to_external_id(entry, url)
@@ -163,16 +164,26 @@ def process_feed(source_config: dict[str, Any], db: Any, source_row: dict[str, A
                 stats["new"] += 1
                 continue
 
-            inserted = upsert_raw_item(db, item)
-            if inserted:
-                stats["new"] += 1
-                log.info("item_saved", title=item.title)
-            else:
-                log.debug("item_duplicate", external_id=external_id)
+            pending_items.append(item)
 
         except Exception as e:
             stats["failed"] += 1
             log.error("entry_processing_failed", error=str(e), entry_id=getattr(entry, "id", "?"))
+
+    if db and pending_items:
+        try:
+            inserted_items = upsert_raw_items(db, pending_items)
+            stats["new"] += len(inserted_items)
+            log.info(
+                "feed_items_saved",
+                source=name,
+                attempted=len(pending_items),
+                inserted=len(inserted_items),
+                duplicates=len(pending_items) - len(inserted_items),
+            )
+        except Exception as e:
+            stats["failed"] += len(pending_items)
+            log.error("feed_items_save_failed", source=name, count=len(pending_items), error=str(e))
 
     if db:
         log_fetch(
@@ -213,6 +224,10 @@ def main() -> None:
             total[k] += stats[k]
 
     log.info("rss_fetcher_done", **total)
+    if not DRY_RUN and total["found"] > 0 and total["new"] == 0 and total["failed"] > 0:
+        raise RuntimeError(
+            f"RSS fetch finished without saved items: found={total['found']} failed={total['failed']}"
+        )
 
 
 if __name__ == "__main__":
