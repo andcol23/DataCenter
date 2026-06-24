@@ -169,7 +169,19 @@ def upsert_source(
         )
         .execute()
     )
-    return result.data[0]
+    if result.data:
+        return result.data[0]
+    existing = (
+        db.table("sources")
+        .select("*")
+        .eq("name", name)
+        .eq("type", source_type)
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        return existing.data[0]
+    raise RuntimeError(f"Could not upsert or load source: {name}")
 
 
 def get_source_by_name(db: Client, name: str) -> dict[str, Any] | None:
