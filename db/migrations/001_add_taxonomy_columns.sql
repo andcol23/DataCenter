@@ -1,14 +1,8 @@
--- ============================================================
--- Migración 001 — Columnas de taxonomía en analyzed_items
--- Ejecutar en Supabase SQL Editor (una sola vez)
--- ============================================================
-
 ALTER TABLE analyzed_items
   ADD COLUMN IF NOT EXISTS primary_slug   TEXT,
   ADD COLUMN IF NOT EXISTS secondary_slug TEXT,
   ADD COLUMN IF NOT EXISTS keywords       JSONB NOT NULL DEFAULT '[]';
 
--- Índices para filtrado y agrupación por taxonomía
 CREATE INDEX IF NOT EXISTS idx_analyzed_primary_slug
   ON analyzed_items(primary_slug);
 
@@ -18,8 +12,6 @@ CREATE INDEX IF NOT EXISTS idx_analyzed_secondary_slug
 CREATE INDEX IF NOT EXISTS idx_analyzed_keywords
   ON analyzed_items USING gin(keywords);
 
--- Actualizar la vista para incluir las nuevas columnas
--- (DROP + CREATE porque Postgres no soporta ALTER VIEW para añadir columnas)
 DROP VIEW IF EXISTS v_pending_post_candidates;
 
 CREATE VIEW v_pending_post_candidates AS

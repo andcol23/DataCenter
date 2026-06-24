@@ -1,18 +1,3 @@
-"""
-Script de autenticación OAuth2 para obtener el refresh_token de Google.
-
-Uso:
-    python tools/google_auth.py
-
-Requiere en .env (o env vars):
-    GOOGLE_CLIENT_ID
-    GOOGLE_CLIENT_SECRET
-
-Scopes configurados: Gmail send + Google Sheets.
-
-El script abre el navegador para autenticación, recibe el callback en localhost:8080,
-e imprime el refresh_token para añadir a .env como GOOGLE_REFRESH_TOKEN.
-"""
 from __future__ import annotations
 
 import json
@@ -25,7 +10,6 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 from dotenv import load_dotenv
 
-# Añadir el root del proyecto al path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 load_dotenv()
@@ -141,7 +125,6 @@ def main() -> None:
 
     webbrowser.open(auth_url)
 
-    # Servidor local para capturar el callback
     server = HTTPServer(("localhost", 8080), OAuthCallbackHandler)
     server.timeout = 300
     print("Esperando autorización en http://localhost:8080 (timeout: 5 min)...")

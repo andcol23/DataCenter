@@ -1,34 +1,17 @@
--- ============================================================
--- Media Intelligence Hub — Schema SQL
--- Requiere: pg_vector extension en Supabase
--- ============================================================
-
--- Habilitar extensión de vectores
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- ============================================================
--- ENUM TYPES
--- ============================================================
 
 CREATE TYPE source_type AS ENUM ('rss', 'gmail', 'gdrive', 'obsidian', 'manual');
 CREATE TYPE item_status AS ENUM ('raw', 'analyzing', 'analyzed', 'failed', 'archived');
 CREATE TYPE post_format AS ENUM ('single_post', 'carousel', 'article');
 CREATE TYPE post_status AS ENUM ('draft', 'approved', 'published', 'discarded');
 
--- ============================================================
--- TABLA: sources
--- Repositorio de todas las fuentes de contenido registradas
--- ============================================================
 
 CREATE TABLE sources (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name            TEXT NOT NULL,
     type            source_type NOT NULL,
     config          JSONB NOT NULL DEFAULT '{}',
-    -- Para RSS: {"url": "https://..."}
-    -- Para Gmail: {"label": "media-hub", "sender_filter": "@substack.com"}
-    -- Para GDrive: {"folder_id": "1abc..."}
-    -- Para Obsidian: {"vault_path": "Inbox/"}
     is_active       BOOLEAN NOT NULL DEFAULT true,
     fetch_interval  INTERVAL NOT NULL DEFAULT '12 hours',
     last_fetched_at TIMESTAMPTZ,
@@ -38,10 +21,6 @@ CREATE TABLE sources (
     UNIQUE (name, type)         -- requerido por upsert_source ON CONFLICT (name, type)
 );
 
--- ============================================================
--- TABLA: raw_items
--- Contenido crudo capturado antes del análisis
--- ============================================================
 
 CREATE TABLE raw_items (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -59,7 +38,6 @@ CREATE TABLE raw_items (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    -- Evitar duplicados por fuente
     UNIQUE (source_id, external_id)
 );
 
@@ -67,16 +45,11 @@ CREATE INDEX idx_raw_items_source_id   ON raw_items(source_id);
 CREATE INDEX idx_raw_items_status      ON raw_items(status);
 CREATE INDEX idx_raw_items_published   ON raw_items(published_at DESC);
 
--- ============================================================
--- TABLA: analyzed_items
--- Resultado del análisis con OpenAI (extracción JSON estructurado)
--- ============================================================
 
 CREATE TABLE analyzed_items (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     raw_item_id     UUID NOT NULL UNIQUE REFERENCES raw_items(id) ON DELETE CASCADE,
 
-    -- Campos extraídos por el agente OpenAI
     summary         TEXT,                           -- Resumen ejecutivo (150-200 palabras)
     key_insights    TEXT[],                         -- Array de insights clave (3-5)
     topics          TEXT[],                         -- Temas principales detectados
@@ -91,7 +64,6 @@ CREATE TABLE analyzed_items (
     keywords        JSONB NOT NULL DEFAULT '[]',    -- ["keyword_type/keyword-slug", ...]
     raw_analysis    JSONB NOT NULL DEFAULT '{}',    -- JSON completo devuelto por OpenAI
 
-    -- Embedding del contenido para búsqueda semántica
     embedding       vector(1536),                   -- text-embedding-3-small = 1536 dims
 
     analyzed_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -102,7 +74,6 @@ CREATE TABLE analyzed_items (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Índice HNSW para búsqueda semántica eficiente
 CREATE INDEX idx_analyzed_embedding ON analyzed_items
     USING hnsw (embedding vector_cosine_ops)
     WITH (m = 16, ef_construction = 64);
@@ -113,10 +84,6 @@ CREATE INDEX idx_analyzed_primary    ON analyzed_items(primary_slug);
 CREATE INDEX idx_analyzed_secondary  ON analyzed_items(primary_slug, secondary_slug);
 CREATE INDEX idx_analyzed_keywords   ON analyzed_items USING gin(keywords);
 
--- ============================================================
--- TABLA: tags
--- Taxonomía controlada de etiquetas
--- ============================================================
 
 CREATE TABLE tags (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -125,10 +92,6 @@ CREATE TABLE tags (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ============================================================
--- TABLA: item_tags
--- Relación many-to-many entre analyzed_items y tags
--- ============================================================
 
 CREATE TABLE item_tags (
     item_id     UUID NOT NULL REFERENCES analyzed_items(id) ON DELETE CASCADE,
@@ -137,10 +100,6 @@ CREATE TABLE item_tags (
     PRIMARY KEY (item_id, tag_id)
 );
 
--- ============================================================
--- TABLA: linkedin_posts
--- Posts y carousels generados listos para publicar
--- ============================================================
 
 CREATE TABLE linkedin_posts (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -149,20 +108,16 @@ CREATE TABLE linkedin_posts (
     format          post_format NOT NULL,
     status          post_status NOT NULL DEFAULT 'draft',
 
-    -- Contenido del post
     hook            TEXT,                           -- Primera línea/gancho
     body            TEXT NOT NULL,                  -- Cuerpo completo
     cta             TEXT,                           -- Call to action
     hashtags        TEXT[],
 
-    -- Para carousels: array de slides [{title, body, visual_suggestion}]
     slides          JSONB,
 
-    -- Métricas de calidad (opcionales, para tracking futuro)
     estimated_reach INTEGER,
     engagement_pred NUMERIC(5,2),
 
-    -- Metadata de generación
     generated_by    TEXT NOT NULL DEFAULT 'gpt-4o-mini',
     generation_prompt TEXT,                         -- Prompt usado (auditoría)
     tokens_used     INTEGER,
@@ -178,10 +133,6 @@ CREATE INDEX idx_posts_status       ON linkedin_posts(status);
 CREATE INDEX idx_posts_format       ON linkedin_posts(format);
 CREATE INDEX idx_posts_created      ON linkedin_posts(created_at DESC);
 
--- ============================================================
--- TABLA: linkedin_post_sources
--- Trazabilidad many-to-many entre un post generado y los items analizados usados
--- ============================================================
 
 CREATE TABLE linkedin_post_sources (
     linkedin_post_id UUID NOT NULL REFERENCES linkedin_posts(id) ON DELETE CASCADE,
@@ -195,10 +146,6 @@ CREATE TABLE linkedin_post_sources (
 CREATE INDEX idx_post_sources_item  ON linkedin_post_sources(analyzed_item_id);
 CREATE INDEX idx_post_sources_order ON linkedin_post_sources(linkedin_post_id, source_order);
 
--- ============================================================
--- TABLA: fetch_logs
--- Historial de ejecuciones del scheduler para debugging
--- ============================================================
 
 CREATE TABLE fetch_logs (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -216,9 +163,6 @@ CREATE TABLE fetch_logs (
 CREATE INDEX idx_fetch_logs_source   ON fetch_logs(source_id);
 CREATE INDEX idx_fetch_logs_started  ON fetch_logs(started_at DESC);
 
--- ============================================================
--- FUNCIÓN: updated_at automático
--- ============================================================
 
 CREATE OR REPLACE FUNCTION trigger_set_updated_at()
 RETURNS TRIGGER AS $$
@@ -240,10 +184,6 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON analyzed_items
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON linkedin_posts
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
--- ============================================================
--- FUNCIÓN: búsqueda semántica por similitud coseno
--- Uso: SELECT * FROM search_similar_items('tu query embebida', 0.75, 10);
--- ============================================================
 
 CREATE OR REPLACE FUNCTION search_similar_items(
     query_embedding vector(1536),
@@ -278,9 +218,6 @@ BEGIN
 END;
 $$;
 
--- ============================================================
--- VISTA: dashboard de items pendientes de post
--- ============================================================
 
 CREATE VIEW v_pending_post_candidates AS
 SELECT
@@ -311,10 +248,6 @@ WHERE ai.relevance_score >= 0.60
   )
 ORDER BY ai.relevance_score DESC, ai.analyzed_at DESC;
 
--- ============================================================
--- TABLA: daily_shortlists
--- Guarda el shortlist diario enviado por email y la respuesta de aprobación
--- ============================================================
 
 CREATE TABLE daily_shortlists (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -331,10 +264,6 @@ CREATE TABLE daily_shortlists (
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON daily_shortlists
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
--- ============================================================
--- TABLA: on_demand_requests
--- Solicitudes on-demand de generación de posts (trigger por email)
--- ============================================================
 
 CREATE TABLE on_demand_requests (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -351,10 +280,6 @@ CREATE TABLE on_demand_requests (
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON on_demand_requests
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
--- ============================================================
--- DATOS SEED: fuentes no-RSS de ejemplo
--- Las fuentes RSS se sincronizan automáticamente desde config/sources.yml
--- ============================================================
 
 INSERT INTO sources (name, type, config, fetch_interval) VALUES
     ('Gmail Media Hub Label',   'gmail',  '{"label": "media-hub"}', '6 hours'),

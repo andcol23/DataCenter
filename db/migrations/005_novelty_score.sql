@@ -1,21 +1,10 @@
--- ============================================================
--- Migración 005 — Score de novedad/recencia en analyzed_items
--- Ejecutar en Supabase SQL Editor después de 004
--- ============================================================
--- El producto prioriza lo más nuevo posible, incluido un dato nuevo sobre un tema
--- antiguo. novelty_score (0-1) captura esa frescura, separada de la relevancia.
-
 ALTER TABLE analyzed_items
   ADD COLUMN IF NOT EXISTS novelty_score NUMERIC(3,2);
 
-COMMENT ON COLUMN analyzed_items.novelty_score IS
-  'Frescura del contenido: 1.0 noticia/dato de hoy, 0.7 dato nuevo de tema viejo, 0.0 atemporal';
 
 CREATE INDEX IF NOT EXISTS idx_analyzed_novelty
   ON analyzed_items(novelty_score DESC NULLS LAST);
 
--- Actualizar la vista de candidatos para exponer novelty_score y ordenar por
--- una combinación de recencia + relevancia + fuerza de datos.
 DROP VIEW IF EXISTS v_pending_post_candidates;
 
 CREATE VIEW v_pending_post_candidates AS

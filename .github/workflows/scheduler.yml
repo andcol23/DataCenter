@@ -2,11 +2,6 @@ name: DataCenter — Daily Pipeline
 
 on:
   schedule:
-    # Solo días laborales (lun-vie). 06:25 UTC ≈ 08:25 España CEST (UTC+2) / 07:25 CET (UTC+1).
-    # Se evita el minuto 0 (donde GitHub encola con más retraso) y se adelanta la hora
-    # para que el email llegue muy antes de las 14:00 aunque el cron se retrase.
-    # El lunes el digest amplía la ventana de búsqueda para cubrir el fin de semana
-    # + la tarde del viernes (ver _lookback_hours_for_today en output/daily_digest.py).
     - cron: "25 6 * * 1-5"
 
   workflow_dispatch:
@@ -22,9 +17,6 @@ env:
   GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
 
 jobs:
-  # ──────────────────────────────────────────────────────────────────────────
-  # JOB 1: RSS Fetcher
-  # ──────────────────────────────────────────────────────────────────────────
   fetch-rss:
     name: "RSS Fetcher"
     runs-on: ubuntu-latest
@@ -88,9 +80,6 @@ jobs:
           path: fetcher.log
           retention-days: 7
 
-  # ──────────────────────────────────────────────────────────────────────────
-  # JOB 2: Analyzer
-  # ──────────────────────────────────────────────────────────────────────────
   analyze:
     name: "OpenAI Analyzer"
     runs-on: ubuntu-latest
@@ -152,9 +141,6 @@ jobs:
           path: analyzer.log
           retention-days: 7
 
-  # ──────────────────────────────────────────────────────────────────────────
-  # JOB 3: Daily Digest — envía el top 5 por email
-  # ──────────────────────────────────────────────────────────────────────────
   send-digest:
     name: "Send Daily Digest Email"
     runs-on: ubuntu-latest
@@ -202,9 +188,6 @@ jobs:
           path: digest.log
           retention-days: 7
 
-  # ──────────────────────────────────────────────────────────────────────────
-  # JOB 4: Resumen final del pipeline
-  # ──────────────────────────────────────────────────────────────────────────
   summary:
     name: "Pipeline Summary"
     runs-on: ubuntu-latest

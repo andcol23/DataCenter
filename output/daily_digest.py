@@ -1,22 +1,3 @@
-"""
-DataCenter — Daily Digest
-
-Envía UN correo diario (HTML) con el top 5 de noticias del día, ordenadas por
-relevancia/novedad y con cuota de diversidad por tema. Es puramente informativo:
-la base de datos curada vive en analyzed_items; aquí solo se selecciona y maqueta.
-
-Uso:
-    python -m output.daily_digest
-
-Env vars:
-    GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN  (scope: gmail.send; fallback Sheets auth)
-    GOOGLE_SHEET_ID
-    GOOGLE_SERVICE_ACCOUNT_JSON  — recomendado para Sheets en CI
-    DAILY_DIGEST_TO        — destinatario (requerido, sin default)
-    MAX_SHORTLIST          — nº de noticias en el correo (default: 5)
-    MONDAY_LOOKBACK_HOURS  — override de la ventana del lunes (default: calculada)
-    DRY_RUN                — si "true", imprime el correo en vez de enviarlo
-"""
 from __future__ import annotations
 
 import base64
@@ -44,14 +25,12 @@ DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
 
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
-# Zona horaria de España para decidir la ventana de lookback según el día.
 try:
     from zoneinfo import ZoneInfo
     _SPAIN_TZ = ZoneInfo("Europe/Madrid")
 except Exception:  # pragma: no cover - fallback si no hay tzdata
     _SPAIN_TZ = timezone(timedelta(hours=2))
 
-# ── Términos para afinar el ranking (no filtran, solo bonifican) ───────────────
 
 DOOH_TERMS = (
     "dooh", "ooh", "out of home", "out-of-home", "exterior digital", "media exterior",
@@ -68,10 +47,8 @@ RESEARCH_SOURCES = {
 }
 
 
-# ── Ventana de lookback según el día ──────────────────────────────────────────
 
 def _lookback_hours_for_today(now: datetime | None = None) -> int:
-    """Lunes: cubre desde el viernes 12:00 España. Resto: ventana estándar de 24h."""
     now = now or datetime.now(_SPAIN_TZ)
     if now.tzinfo is None:
         now = now.replace(tzinfo=_SPAIN_TZ)
@@ -90,7 +67,6 @@ def _lookback_hours_for_today(now: datetime | None = None) -> int:
     return SHORTLIST_WINDOW_HOURS
 
 
-# ── Gmail (solo envío) ─────────────────────────────────────────────────────────
 
 def _gmail_service() -> Any:
     import requests as _req
@@ -110,7 +86,6 @@ def _gmail_service() -> Any:
     r.raise_for_status()
     access_token = r.json()["access_token"]
 
-    # Credentials con token ya fresco: googleapiclient no necesita refrescar.
     creds = Credentials(token=access_token)
     return build("gmail", "v1", credentials=creds)
 
@@ -125,7 +100,6 @@ def _send_email(service: Any, to: str, subject: str, html_body: str) -> dict[str
     return result
 
 
-# ── Selección de candidatos ────────────────────────────────────────────────────
 
 def _parse_dt(value: Any) -> datetime | None:
     if not value:
@@ -159,7 +133,6 @@ def _has_any(text: str, terms: tuple[str, ...]) -> bool:
 
 
 def _priority(item: dict[str, Any]) -> float:
-    """Puntuación de orden: relevancia + novedad + pequeños bonus editoriales."""
     text = _text_blob(item)
     score = float(item.get("relevance_score") or 0) * 100
     score += float(item.get("novelty_score") or 0) * 35
@@ -174,7 +147,6 @@ def _priority(item: dict[str, Any]) -> float:
 
 
 def _select_with_diversity(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
-    """Ronda 1: el mejor item de cada primary_slug. Ronda 2: rellena hasta 2 por tema."""
     ordered = sorted(rows, key=lambda r: r.get("_priority", 0.0), reverse=True)
 
     selected: list[dict[str, Any]] = []
@@ -201,7 +173,6 @@ def _select_with_diversity(rows: list[dict[str, Any]], limit: int) -> list[dict[
 
 
 def _get_top_items(db: Any, limit: int = MAX_SHORTLIST) -> list[dict[str, Any]]:
-    """Top items dentro de la ventana del día, con cuota de diversidad por tema."""
     lookback_hours = _lookback_hours_for_today()
     cutoff_dt = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
     log.info("shortlist_window", lookback_hours=lookback_hours, cutoff=cutoff_dt.isoformat())
@@ -228,10 +199,8 @@ def _get_top_items(db: Any, limit: int = MAX_SHORTLIST) -> list[dict[str, Any]]:
     return _select_with_diversity(recent, limit)
 
 
-# ── Maquetación HTML ───────────────────────────────────────────────────────────
 
 def _hashtags(item: dict[str, Any]) -> list[str]:
-    """Topics como #hashtags: primary, secondary y la parte slug de cada keyword."""
     tags: list[str] = []
     for slug in (item.get("primary_slug"), item.get("secondary_slug")):
         if slug:
@@ -322,7 +291,6 @@ def _format_email_html(items: list[dict[str, Any]], today_str: str) -> str:
 </body></html>"""
 
 
-# ── Flujo principal ─────────────────────────────────────────────────────────────
 
 def run_daily(db: Any) -> None:
     log.info("daily_digest_start")

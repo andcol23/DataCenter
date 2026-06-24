@@ -1,16 +1,3 @@
-"""
-Verifica que el GOOGLE_REFRESH_TOKEN puede LEER y ESCRIBIR en el spreadsheet.
-
-Uso:
-    python tools/verify_sheets.py
-
-Comprueba, en este orden:
-  1. Qué cuenta de Google está autorizada por el token o service account.
-  2. Que puede abrir el spreadsheet (GOOGLE_SHEET_ID).
-  3. Que puede ESCRIBIR (crea una pestaña temporal, escribe y la borra).
-
-Si algo falla, el error te dice exactamente qué arreglar.
-"""
 from __future__ import annotations
 
 import json
@@ -175,7 +162,6 @@ def main() -> None:
         print("✗ Falta GOOGLE_SHEET_ID en .env")
         sys.exit(1)
 
-    # 2) Abrir el spreadsheet
     email = "(desconocida)"
     try:
         ss, email = _open_spreadsheet(sheet_id)
@@ -197,7 +183,6 @@ def main() -> None:
         print(f"    con `python tools/google_auth.py` usando la cuenta correcta.")
         sys.exit(1)
 
-    # 3) Probar ESCRITURA (pestaña temporal)
     try:
         tmp_title = f"__verify_tmp_{os.getenv('GITHUB_RUN_ID', os.getpid())}__"
         tmp = ss.add_worksheet(title=tmp_title, rows=2, cols=2)

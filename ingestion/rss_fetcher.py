@@ -1,11 +1,3 @@
-"""
-RSS Fetcher — captura artículos de los feeds configurados en sources.yml
-y los persiste en raw_items (dedup automático).
-
-Uso:
-    python -m ingestion.rss_fetcher
-    DRY_RUN=true python -m ingestion.rss_fetcher
-"""
 from __future__ import annotations
 
 import hashlib
@@ -46,7 +38,6 @@ def load_rss_sources() -> list[dict[str, Any]]:
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def fetch_feed(url: str) -> feedparser.FeedParserDict:
-    """Descarga y parsea un feed RSS/Atom con reintentos."""
     headers = {"User-Agent": "MediaIntelligenceHub/1.0 (RSS fetcher; +github.com)"}
     response = httpx.get(url, headers=headers, timeout=20, follow_redirects=True)
     response.raise_for_status()
@@ -54,7 +45,6 @@ def fetch_feed(url: str) -> feedparser.FeedParserDict:
 
 
 def entry_to_external_id(entry: Any, feed_url: str) -> str:
-    """Deriva un ID estable del entry (GUID > link > hash del título)."""
     if getattr(entry, "id", None):
         return entry.id
     if getattr(entry, "link", None):
@@ -80,7 +70,6 @@ def parse_published_at(entry: Any) -> datetime | None:
 
 
 def extract_body(entry: Any) -> tuple[str | None, str | None]:
-    """Devuelve (body_text, body_html)."""
     html = None
     text = None
 
@@ -102,7 +91,6 @@ def extract_body(entry: Any) -> tuple[str | None, str | None]:
 
 
 def sync_rss_sources(db: Any, source_configs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Sincroniza is_active/config del YAML hacia Supabase y devuelve filas por nombre."""
     if not db:
         return {}
 
@@ -215,7 +203,6 @@ def main() -> None:
         dry_run=DRY_RUN,
     )
 
-    # Un solo cliente para todo el run
     db = get_client() if not DRY_RUN else None
     source_rows = sync_rss_sources(db, source_configs)
 

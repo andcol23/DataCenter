@@ -1,12 +1,3 @@
--- ============================================================
--- Migración 007 — Tabla shortlist_items (aprobación por casilla)
--- Ejecutar en Supabase SQL Editor DESPUÉS de 006_daily_shortlists.sql
--- ============================================================
--- Cada tema del shortlist diario tiene su propia fila con un
--- campo approved (boolean) que el revisor activa en el Table Editor.
--- El job morning inserta con approved=false; el job evening lee
--- solo las filas donde approved=true.
-
 CREATE TABLE IF NOT EXISTS shortlist_items (
     id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     shortlist_id     UUID        REFERENCES daily_shortlists(id) ON DELETE CASCADE,
@@ -24,14 +15,8 @@ CREATE TABLE IF NOT EXISTS shortlist_items (
     UNIQUE (date_key, analyzed_item_id)
 );
 
-COMMENT ON TABLE shortlist_items IS
-    'Un registro por tema del shortlist diario. El revisor marca la casilla approved para publicar.';
 
-COMMENT ON COLUMN shortlist_items.approved IS
-    'TRUE si el revisor quiere publicar este tema. El job de las 20:00 lee solo filas con approved=true.';
 
-COMMENT ON COLUMN shortlist_items.num IS
-    'Posición del tema en el shortlist del día (1 = más prioritario).';
 
 CREATE INDEX IF NOT EXISTS idx_shortlist_items_date
     ON shortlist_items(date_key DESC);
@@ -40,8 +25,6 @@ CREATE INDEX IF NOT EXISTS idx_shortlist_items_approved
     ON shortlist_items(date_key, approved)
     WHERE approved = TRUE;
 
--- ── Vista para el Table Editor ────────────────────────────────
--- Filtra por hoy y ordena por número para facilitar la revisión.
 CREATE OR REPLACE VIEW v_shortlist_today AS
 SELECT
     id,
@@ -57,6 +40,3 @@ SELECT
 FROM shortlist_items
 WHERE date_key = CURRENT_DATE
 ORDER BY num;
-
-COMMENT ON VIEW v_shortlist_today IS
-    'Temas del shortlist de HOY, ordenados por número. Marca la casilla approved para publicar.';

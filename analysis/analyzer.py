@@ -1,22 +1,3 @@
-"""
-Agente de análisis — lee raw_items con status='raw', llama a gpt-4o-mini y
-persiste un registro reducido en analyzed_items (la base de datos curada).
-
-Enfoque "DB curada" (no generación de posts):
-  - Salida mínima por artículo para abaratar tokens: resumen (2-3 frases),
-    key_insights, primary_slug, secondary_slug, keywords, relevance_score,
-    novelty_score. Nada de KPIs, narrativa de LinkedIn, audiencia, etc.
-  - Pre-filtro por keywords ANTES de llamar a OpenAI: descarta ruido evidente
-    sin gastar un solo token.
-  - Cuerpo recortado y prompt ligero para reducir el input (el mayor coste).
-  - Curaduría automática: lo que no supera CURATION_MIN_RELEVANCE se archiva
-    (no entra en la base curada).
-
-Uso:
-    python -m analysis.analyzer
-    DRY_RUN=true python -m analysis.analyzer
-    BATCH_SIZE=5 MAX_ITEMS_PER_RUN=60 python -m analysis.analyzer
-"""
 from __future__ import annotations
 
 import dataclasses
@@ -56,21 +37,16 @@ log = structlog.get_logger()
 DRY_RUN      = os.getenv("DRY_RUN", "false").lower() == "true"
 BATCH_SIZE   = int(os.getenv("BATCH_SIZE", "10"))
 MAX_AGE_DAYS = int(os.getenv("MAX_AGE_DAYS", "7"))    # solo analizar items de los últimos N días
-# Tope duro de items por ejecución: evita que un backlog dispare el tiempo/coste.
 MAX_ITEMS_PER_RUN = int(os.getenv("MAX_ITEMS_PER_RUN", "60"))
-# Umbral de curaduría: por debajo de esto el item se archiva (no entra en la DB).
 CURATION_MIN_RELEVANCE = float(os.getenv("CURATION_MIN_RELEVANCE", "0.5"))
 MODEL        = "gpt-4o-mini"
 REQUIRE_VALID_TAXONOMY = os.getenv("REQUIRE_VALID_TAXONOMY", "true").lower() == "true"
 
-# Cuerpo recortado a ~1.500 palabras: para un resumen de 2-3 frases no hace
-# falta el artículo completo, y el input es el grueso del coste.
 MAX_CONTENT_WORDS = 1_500
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 TAXONOMY_PATH = Path(__file__).parent.parent / "config" / "taxonomy.yml"
 
-# ── Carga y compilación de la taxonomía ───────────────────────────────────────
 
 def _load_taxonomy() -> dict[str, Any]:
     with open(TAXONOMY_PATH, encoding="utf-8") as f:
@@ -78,12 +54,6 @@ def _load_taxonomy() -> dict[str, Any]:
 
 
 def _build_taxonomy_context(tax: dict[str, Any]) -> tuple[str, set[str], set[str]]:
-    """
-    Devuelve:
-      - context_str: bloque compacto para insertar en el system prompt
-      - valid_primaries: conjunto de slugs primarios válidos
-      - valid_secondaries: conjunto de "primary/secondary" válidos
-    """
     lines = ["TAXONOMÍA CONTROLADA (usa SOLO estos slugs):"]
     valid_primaries: set[str] = set()
     valid_secondaries: set[str] = set()
@@ -103,14 +73,11 @@ def _build_taxonomy_context(tax: dict[str, Any]) -> tuple[str, set[str], set[str
     return "\n".join(lines), valid_primaries, valid_secondaries
 
 
-# Cargar en tiempo de importación (falla rápido si el archivo no existe)
 _TAXONOMY      = _load_taxonomy()
 _TAX_CONTEXT, _VALID_PRIMARIES, _VALID_SECONDARIES = _build_taxonomy_context(_TAXONOMY)
 
-# ── Pre-filtro de relevancia (sin tokens) ──────────────────────────────────────
 
 def _expand(slugs: list[str]) -> set[str]:
-    """slug 'ai-advertising' → {'ai-advertising', 'ai advertising'}."""
     out: set[str] = set()
     for s in slugs:
         out.add(s)
@@ -119,7 +86,6 @@ def _expand(slugs: list[str]) -> set[str]:
 
 
 _mf = _TAXONOMY.get("market_focus", {})
-# Términos que indican relevancia (núcleo + contexto del perfil) + genéricos de medios.
 RELEVANT_TERMS: tuple[str, ...] = tuple(
     _expand(_mf.get("core", []) + _mf.get("context", []))
     | {
@@ -129,7 +95,6 @@ RELEVANT_TERMS: tuple[str, ...] = tuple(
         "out of home", "out-of-home", "exterior digital", "signage", "marketing",
     }
 )
-# Ruido evidente: solo se descarta si NO aparece ningún término relevante.
 NOISE_TERMS: tuple[str, ...] = tuple(
     _expand(_mf.get("peripheral", []))
     | {
@@ -151,8 +116,6 @@ def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
 
 
 def _prefilter_relevant(raw: dict[str, Any]) -> bool:
-    """True si merece análisis IA. Conservador: solo descarta ruido evidente
-    (términos de periferia y CERO términos relevantes)."""
     text = " ".join([
         str(raw.get("title") or ""),
         str(raw.get("body_text") or raw.get("body_html") or "")[:4_000],
@@ -164,7 +127,6 @@ def _prefilter_relevant(raw: dict[str, Any]) -> bool:
     return True
 
 
-# ── Prompts ───────────────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """\
 Eres un analista de inteligencia de medios para un profesional senior del sector \
@@ -220,7 +182,6 @@ URL: {url}
 Contenido:
 {body}"""
 
-# ── OpenAI helpers ────────────────────────────────────────────────────────────
 
 def _openai() -> OpenAI:
     return OpenAI(api_key=os.environ["OPENAI_API_KEY"])
@@ -233,7 +194,6 @@ def _openai() -> OpenAI:
     reraise=True,
 )
 def call_analysis(client: OpenAI, prompt: str) -> tuple[dict[str, Any], int]:
-    """Llama a gpt-4o-mini y devuelve (parsed_json, tokens_used)."""
     system = SYSTEM_PROMPT.format(taxonomy_context=_TAX_CONTEXT)
     response = client.chat.completions.create(
         model=MODEL,
@@ -250,7 +210,6 @@ def call_analysis(client: OpenAI, prompt: str) -> tuple[dict[str, Any], int]:
     return json.loads(raw), tokens
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _truncate(text: str | None) -> str:
     if not text:
@@ -281,7 +240,6 @@ class TaxonomyValidation:
 
 
 def _validate_taxonomy(data: dict[str, Any]) -> TaxonomyValidation:
-    """Valida primary_slug, secondary_slug y keywords contra el catálogo controlado."""
     primary = str(data.get("primary_slug") or "").strip().lower()
     secondary = str(data.get("secondary_slug") or "").strip().lower()
     raw_keywords = data.get("keywords") or []
@@ -347,7 +305,6 @@ def _to_analyzed_item(
     taxonomy: TaxonomyValidation,
     published_at: datetime | None = None,
 ) -> AnalyzedItem:
-    """Mapea la respuesta de OpenAI al dataclass AnalyzedItem (esquema reducido)."""
     insights = [str(i) for i in (data.get("key_insights") or []) if str(i).strip()][:5]
     return AnalyzedItem(
         raw_item_id=UUID(raw["id"]),
@@ -367,10 +324,8 @@ def _to_analyzed_item(
     )
 
 
-# ── Item processor ────────────────────────────────────────────────────────────
 
 def process_item(raw: dict[str, Any], oai: OpenAI, db: Any) -> bool:
-    """Analiza un raw_item. Devuelve True si tuvo éxito (incluye archivado)."""
     item_id = raw["id"]
     title   = (raw.get("title") or "")[:80]
 
@@ -381,7 +336,6 @@ def process_item(raw: dict[str, Any], oai: OpenAI, db: Any) -> bool:
             update_raw_item_status(db, item_id, "failed", "No content to analyze")
         return False
 
-    # 0. Pre-filtro sin tokens: descarta ruido evidente antes de llamar a OpenAI.
     if not _prefilter_relevant(raw):
         log.info("item_prefiltered", title=title)
         if not DRY_RUN:
@@ -391,7 +345,6 @@ def process_item(raw: dict[str, Any], oai: OpenAI, db: Any) -> bool:
     if not DRY_RUN:
         update_raw_item_status(db, item_id, "analyzing")
 
-    # 1. Análisis estructurado
     try:
         data, tokens = call_analysis(oai, _build_prompt(raw))
     except Exception as exc:
@@ -400,7 +353,6 @@ def process_item(raw: dict[str, Any], oai: OpenAI, db: Any) -> bool:
             update_raw_item_status(db, item_id, "failed", str(exc)[:500])
         return False
 
-    # Validar campos obligatorios
     missing = [f for f in ("resumen", "key_insights", "relevance_score") if not data.get(f)]
     if missing:
         log.error("missing_fields", item_id=item_id, missing=missing)
@@ -436,13 +388,11 @@ def process_item(raw: dict[str, Any], oai: OpenAI, db: Any) -> bool:
                  tokens=tokens)
         return True
 
-    # 2. Curaduría: por debajo del umbral se archiva (no entra en la DB curada).
     if analyzed.relevance_score < CURATION_MIN_RELEVANCE:
         log.info("item_archived_low_relevance", title=title, score=analyzed.relevance_score)
         update_raw_item_status(db, item_id, "archived", f"relevance {analyzed.relevance_score} < {CURATION_MIN_RELEVANCE}")
         return True
 
-    # 3. Persistir en la base de datos curada
     insert_analyzed_item(db, analyzed)
     update_raw_item_status(db, item_id, "analyzed")
     log.info("item_analyzed", title=title,
@@ -453,7 +403,6 @@ def process_item(raw: dict[str, Any], oai: OpenAI, db: Any) -> bool:
     return True
 
 
-# ── Batch loop ────────────────────────────────────────────────────────────────
 
 def run_all(oai: OpenAI, db: Any) -> None:
     total_ok = total_fail = batch_n = total_seen = 0
@@ -499,10 +448,8 @@ def run_all(oai: OpenAI, db: Any) -> None:
     log.info("analyzer_done", batches=batch_n, total_ok=total_ok, total_failed=total_fail)
 
 
-# ── Dry-run samples ───────────────────────────────────────────────────────────
 
 def _dry_run_samples() -> list[dict[str, Any]]:
-    """Items de muestra para probar el pipeline sin BD."""
     return [
         {
             "id": "00000000-0000-0000-0000-000000000001",
@@ -532,7 +479,6 @@ def _dry_run_samples() -> list[dict[str, Any]]:
     ]
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
     structlog.configure(

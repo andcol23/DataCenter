@@ -65,7 +65,6 @@ class AnalyzerTaxonomyTests(unittest.TestCase):
         self.assertGreaterEqual(len(result.errors), 1)
 
     def test_validate_taxonomy_rejects_secondary_from_wrong_primary(self) -> None:
-        # streaming-ctv lives under media-advertising, not tech-innovation
         result = _validate_taxonomy({
             "primary_slug": "tech-innovation",
             "secondary_slug": "streaming-ctv",

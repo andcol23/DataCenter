@@ -1,17 +1,3 @@
-# ============================================================
-# Media Intelligence Hub — Taxonomía de contenidos (v2)
-# ============================================================
-# Reescrita sobre 7 macro-temas de media intelligence: medios,
-# Exterior digital (OOH/DOOH/pDOOH), tecnología publicitaria, AI,
-# automatización, data y consumo.
-#
-# Reemplaza la taxonomía "EQOIC Labs" anterior.
-#
-# Patrón de slug: minúsculas, guiones, sin acentos, singular cuando sea posible.
-# El analyzer clasifica cada item eligiendo primary_slug + secondary_slug
-# del catálogo, y normaliza keywords con formato {keyword_type}/{keyword_slug}.
-# ============================================================
-
 version: 2
 
 slug_rules:
@@ -20,8 +6,6 @@ slug_rules:
   - no_accents
   - singular_preferred
 
-# Mercado núcleo del producto. El analyzer usa esto para calibrar relevancia:
-# lo que toca estos temas es señal; lo que no, es periferia.
 market_focus:
   core:
     - ooh
@@ -46,8 +30,6 @@ market_focus:
     - automation
     - saas
     - market-research
-  # Temas que el sistema antiguo dejaba colar y que aquí son ruido salvo
-  # ángulo publicitario explícito.
   peripheral:
     - renewable-energy
     - blockchain
@@ -72,7 +54,6 @@ keyword_types:
 
 primaries:
 
-  # ── 1 ─────────────────────────────────────────────────────────────────────
   - slug: media-advertising
     label: "Media & Advertising"
     description: "Ecosistema de medios y publicidad: Exterior (OOH/DOOH/pDOOH), CTV, programática, planificación y compra de medios"
@@ -135,7 +116,6 @@ primaries:
           - geo/spain
           - audience/cmo
 
-  # ── 2 ─────────────────────────────────────────────────────────────────────
   - slug: tech-innovation
     label: "Tech & Innovation"
     description: "Tecnología pura y aplicada a publicidad: IA, automatización, SaaS, adtech/martech, datos y privacidad"
@@ -191,7 +171,6 @@ primaries:
           - trend/spatial-computing
           - trend/digital-twins
 
-  # ── 3 ─────────────────────────────────────────────────────────────────────
   - slug: consumer-behavior
     label: "Consumer Behavior"
     description: "Comportamiento, percepción y expectativas del consumidor frente a marcas, medios y publicidad"
@@ -233,7 +212,6 @@ primaries:
           - trend/streaming-consumption
           - audience/youth
 
-  # ── 4 ─────────────────────────────────────────────────────────────────────
   - slug: creative-content
     label: "Creative & Content"
     description: "Estrategia creativa, formatos, storytelling y producción de contenido publicitario"
@@ -275,7 +253,6 @@ primaries:
           - format/ugc
           - audience/creator
 
-  # ── 5 ─────────────────────────────────────────────────────────────────────
   - slug: market
     label: "Market"
     description: "Resultados de mercado, inversión publicitaria, negocio, M&A, regulación y previsiones"
@@ -318,7 +295,6 @@ primaries:
           - index/consumer-confidence-index
           - trend/macro-trend
 
-  # ── 6 ─────────────────────────────────────────────────────────────────────
   - slug: retail
     label: "Retail"
     description: "Retail media, shopper marketing, ecommerce, omnicanalidad y comercio"
@@ -360,7 +336,6 @@ primaries:
           - format/digital-signage
           - trend/retail-media-network
 
-  # ── 7 ─────────────────────────────────────────────────────────────────────
   - slug: measurement-data
     label: "Measurement & Data"
     description: "Medición de audiencias, atribución, efectividad publicitaria e investigación de mercado"

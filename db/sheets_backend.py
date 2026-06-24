@@ -1,26 +1,3 @@
-"""
-Google Sheets como backend de datos — reemplazo de Supabase/Postgres.
-
-Cada tabla de Supabase es una pestaña (worksheet) del spreadsheet. La fila 1 es la
-cabecera (nombres de columna) y el resto son los datos.
-
-Este módulo expone un cliente con una API *fluida* que imita el subconjunto de
-`supabase-py` que usa el pipeline, de modo que el resto del código apenas cambia:
-
-    db = get_spreadsheet_client()
-    db.table("raw_items").select("*").eq("status", "raw").limit(50).execute().data
-    db.table("sources").upsert({...}, on_conflict="name,type").execute()
-    db.table("analyzed_items").update({"relevance_score": 0.9}).eq("id", x).execute()
-    db.rpc("search_similar_items", {...}).execute()      # → [] (sin embeddings)
-
-Decisiones de diseño:
-  • Se EXCLUYEN las columnas `embedding` (analyzed_items) y `body_html` (raw_items),
-    y la tabla `fetch_logs` no se migra (logs operativos).
-  • Las columnas JSON (listas/objetos) se serializan como texto JSON en la celda.
-  • Las fechas se guardan como texto ISO-8601; las comparaciones gte/order son
-    lexicográficas (válido para ISO UTC, igual que hacía el código original).
-  • La búsqueda semántica (`search_similar_items`) deja de existir → devuelve [].
-"""
 from __future__ import annotations
 
 import json
@@ -29,24 +6,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-# gspread / google-auth se importan de forma perezosa dentro de get_spreadsheet()
-# para que importar este módulo no falle si solo se necesitan los esquemas.
 
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 
 
-# ===========================================================================
-# Esquemas de cada pestaña (orden de columnas + tipos)
-# ===========================================================================
 
-# Por cada tabla definimos:
-#   columns   → orden exacto de columnas (cabecera de la pestaña)
-#   json_arr  → columnas JSON cuyo default es []  (listas)
-#   json_obj  → columnas JSON cuyo default es {}  (objetos)
-#   bools     → columnas booleanas
-#   ints      → columnas enteras
-#   floats    → columnas numéricas decimales
-# El resto de columnas se tratan como texto.
 
 SCHEMAS: dict[str, dict[str, Any]] = {
     "sources": {
@@ -65,9 +29,6 @@ SCHEMAS: dict[str, dict[str, Any]] = {
         ],
         "json_obj": {"metadata"},
     },
-    # Base de datos curada. Orden de columnas optimizado para lectura humana:
-    # las dos fechas primero, luego título original, resumen IA, insights,
-    # taxonomía, link original y, por último, ids/metadatos técnicos.
     "analyzed_items": {
         "columns": [
             "created_at", "analyzed_at", "title", "summary", "key_insights",
@@ -83,22 +44,16 @@ SCHEMAS: dict[str, dict[str, Any]] = {
     },
 }
 
-# Tablas que generan id/timestamps automáticamente al insertar.
 _AUTO_ID_TABLES = {
     "sources", "raw_items", "analyzed_items",
 }
 
-# Relaciones para resolver joins anidados y la vista de candidatos.
-#   tabla_local -> (tabla_remota, fk_local, pk_remota)
 JOINS: dict[str, tuple[str, str, str]] = {
     "analyzed_items": ("raw_items", "raw_item_id", "id"),
     "raw_items": ("sources", "source_id", "id"),
 }
 
 
-# ===========================================================================
-# Serialización / deserialización por columna
-# ===========================================================================
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -118,21 +73,17 @@ def _col_kind(schema: dict[str, Any], col: str) -> str:
     return "text"
 
 
-# Google Sheets limita cada celda a 50.000 caracteres. Dejamos margen para el
-# marcador de truncado y evitamos APIError: [400] al escribir textos largos.
 MAX_CELL_CHARS = 50_000
 _TRUNC_MARK = "…[truncado]"
 
 
 def _cap(text: str) -> str:
-    """Recorta una cadena al límite de celda de Google Sheets."""
     if len(text) <= MAX_CELL_CHARS:
         return text
     return text[: MAX_CELL_CHARS - len(_TRUNC_MARK)] + _TRUNC_MARK
 
 
 def serialize_cell(table: str, col: str, value: Any) -> Any:
-    """Convierte un valor Python en el valor que se escribe en la celda (RAW)."""
     schema = SCHEMAS[table]
     kind = _col_kind(schema, col)
 
@@ -160,7 +111,6 @@ def serialize_cell(table: str, col: str, value: Any) -> Any:
 
 
 def deserialize_cell(table: str, col: str, value: Any) -> Any:
-    """Convierte el valor crudo leído de la celda en un valor Python tipado."""
     schema = SCHEMAS[table]
     kind = _col_kind(schema, col)
 
@@ -200,19 +150,16 @@ def deserialize_cell(table: str, col: str, value: Any) -> Any:
 
 
 def row_to_values(table: str, row: dict[str, Any]) -> list[Any]:
-    """Ordena un dict según el esquema y lo serializa a una fila de celdas."""
     cols = SCHEMAS[table]["columns"]
     return [serialize_cell(table, c, row.get(c)) for c in cols]
 
 
 def values_to_row(table: str, raw: dict[str, Any]) -> dict[str, Any]:
-    """Deserializa un registro crudo (header→valor) a un dict Python tipado."""
     cols = SCHEMAS[table]["columns"]
     return {c: deserialize_cell(table, c, raw.get(c, "")) for c in cols}
 
 
 def _cell_to_value(cell: dict[str, Any]) -> Any:
-    """Extrae un valor Python desde CellData de spreadsheets.get."""
     effective = cell.get("effectiveValue") or {}
     if "stringValue" in effective:
         return effective["stringValue"]
@@ -226,7 +173,6 @@ def _cell_to_value(cell: dict[str, Any]) -> Any:
 
 
 def _value_to_cell(value: Any) -> dict[str, Any]:
-    """Convierte un valor Python en CellData para spreadsheets.batchUpdate."""
     if value is None or value == "":
         return {}
     if isinstance(value, bool):
@@ -236,12 +182,8 @@ def _value_to_cell(value: Any) -> dict[str, Any]:
     return {"userEnteredValue": {"stringValue": str(value)}}
 
 
-# ===========================================================================
-# Conexión a Google Sheets
-# ===========================================================================
 
 def _fetch_access_token() -> str:
-    """Obtiene un access token fresco directamente via HTTP, sin pasar por google-auth."""
     import requests as _req
     import logging
 
@@ -264,7 +206,6 @@ def _fetch_access_token() -> str:
         raise RuntimeError(
             f"Respuesta de token inválida (falta access_token): {payload}"
         )
-    # Log de diagnóstico: muestra los scopes concedidos al access token.
     granted_scope = payload.get("scope", "(scope no devuelto por el endpoint)")
     logging.getLogger(__name__).info("google_token_scopes: %s", granted_scope)
     print(f"[sheets_backend] token_scopes: {granted_scope}", flush=True)
@@ -281,7 +222,6 @@ def _fetch_access_token() -> str:
 
 
 def get_spreadsheet():
-    """Abre el spreadsheet usando un Bearer token directo — sin AuthorizedSession."""
     import json as _json
     import requests as _req
     import gspread
@@ -341,8 +281,6 @@ def get_spreadsheet():
 
     access_token = _fetch_access_token()
 
-    # Sesión plain-requests con el Bearer hardcodeado: google-auth no interviene
-    # en ninguna petición, eliminando el riesgo de reauth que trunca los scopes.
     _session = _req.Session()
     _session.headers["Authorization"] = f"Bearer {access_token}"
 
@@ -356,12 +294,8 @@ def get_spreadsheet():
     return gc.open_by_key(sheet_id)
 
 
-# ===========================================================================
-# Store: lectura/escritura con caché en memoria por pestaña
-# ===========================================================================
 
 class _Store:
-    """Mantiene una copia en memoria de cada pestaña y la sincroniza con Sheets."""
 
     def __init__(self, spreadsheet):
         self.ss = spreadsheet
@@ -474,9 +408,6 @@ class _Store:
         return dict(row)
 
 
-# ===========================================================================
-# Resultado y emulador de queries
-# ===========================================================================
 
 class _Result:
     def __init__(self, data: Any):
@@ -508,7 +439,6 @@ def _matches(row: dict[str, Any], col: str, op: str, val: Any) -> bool:
 
 
 class _Query:
-    """Emula el query-builder de supabase-py sobre el _Store."""
 
     def __init__(self, store: _Store, table: str):
         self.store = store
@@ -519,13 +449,11 @@ class _Query:
         self._limit: int | None = None
         self._single = False
         self._negate_next = False
-        # operación de escritura pendiente
         self._op: str | None = None
         self._payload: Any = None
         self._on_conflict: str | None = None
         self._ignore_duplicates = False
 
-    # ── lectura ───────────────────────────────────────────────────────────
     def select(self, columns: str = "*", *_a, **_k) -> "_Query":
         self._select = columns
         return self
@@ -560,7 +488,6 @@ class _Query:
         return self
 
     def is_(self, col: str, val: Any) -> "_Query":
-        # `is_(col, "null")` → IS NULL; con `.not_` delante → IS NOT NULL
         is_null = (val is None) or (str(val).lower() == "null")
         if is_null:
             op = "is_not_null" if self._negate_next else "is_null"
@@ -586,7 +513,6 @@ class _Query:
         self._single = True
         return self
 
-    # ── escritura ─────────────────────────────────────────────────────────
     def insert(self, payload: dict[str, Any] | list[dict[str, Any]]) -> "_Query":
         self._op = "insert"
         self._payload = payload
@@ -611,7 +537,6 @@ class _Query:
         self._ignore_duplicates = ignore_duplicates
         return self
 
-    # ── ejecución ─────────────────────────────────────────────────────────
     def execute(self) -> _Result:
         if self._op == "insert":
             return self._do_insert()
@@ -621,7 +546,6 @@ class _Query:
             return self._do_upsert()
         return self._do_select()
 
-    # ── helpers de escritura ──────────────────────────────────────────────
     def _prepare_new(self, payload: dict[str, Any]) -> dict[str, Any]:
         row = dict(payload)
         if self.table in _AUTO_ID_TABLES and not row.get("id"):
@@ -632,7 +556,6 @@ class _Query:
             row["created_at"] = now
         if "updated_at" in cols and not row.get("updated_at"):
             row["updated_at"] = now
-        # rellenar columnas ausentes con None para mantener el ancho de la fila
         return {c: row.get(c) for c in cols}
 
     def _do_insert(self) -> _Result:
@@ -671,7 +594,6 @@ class _Query:
         recs = self.store.records(self.table)
         cols = SCHEMAS[self.table]["columns"]
 
-        # índice de filas existentes por clave de conflicto
         existing: dict[tuple, int] = {}
         for i, r in enumerate(recs):
             existing[self._conflict_key(r)] = i
@@ -697,7 +619,6 @@ class _Query:
                 out.append(row)
         return _Result(out)
 
-    # ── helpers de lectura ────────────────────────────────────────────────
     def _do_select(self) -> _Result:
         if self.table == "v_pending_post_candidates":
             rows = _view_pending_candidates(self.store)
@@ -706,7 +627,6 @@ class _Query:
         else:
             rows = [dict(r) for r in self.store.records(self.table)]
 
-        # filtros (soportan columnas con punto: "analyzed_items.primary_slug")
         for col, op, val in self._filters:
             rows = [r for r in rows if _matches(_resolve(r, col), *_split_dotted(r, col, op, val))] \
                 if "." in col else [r for r in rows if _matches(r, col, op, val)]
@@ -724,13 +644,11 @@ class _Query:
 
 
 def _split_dotted(row, col, op, val):
-    """Para filtros con punto devuelve (subcol, op, val) sobre el dict anidado."""
     leaf = col.split(".")[-1]
     return (leaf, op, val)
 
 
 def _resolve(row: dict[str, Any], dotted: str) -> dict[str, Any]:
-    """Navega 'analyzed_items.primary_slug' → el dict que contiene 'primary_slug'."""
     parts = dotted.split(".")
     cur: Any = row
     for p in parts[:-1]:
@@ -738,16 +656,12 @@ def _resolve(row: dict[str, Any], dotted: str) -> dict[str, Any]:
     return cur if isinstance(cur, dict) else {}
 
 
-# ===========================================================================
-# Joins anidados y vista de candidatos
-# ===========================================================================
 
 def _index_by_id(store: _Store, table: str) -> dict[str, dict[str, Any]]:
     return {r["id"]: r for r in store.records(table) if r.get("id")}
 
 
 def _attach_chain(store: _Store, base_table: str, row: dict[str, Any], select: str) -> dict[str, Any] | None:
-    """Adjunta relaciones anidadas to-one según las que aparezcan en el select."""
     out = dict(row)
     cur_table = base_table
     cur_row = out
@@ -780,11 +694,6 @@ def _select_with_joins(store: _Store, table: str, select: str) -> list[dict[str,
 
 
 def _view_pending_candidates(store: _Store) -> list[dict[str, Any]]:
-    """Vista v_pending_post_candidates sobre la base de datos curada:
-
-    analyzed_items (con relevance_score >= 0.60) enriquecido con source_name
-    vía raw_items ⨝ sources. title/url ya viven en analyzed_items.
-    """
     raw_idx = _index_by_id(store, "raw_items")
     src_idx = _index_by_id(store, "sources")
 
@@ -822,12 +731,8 @@ def _view_pending_candidates(store: _Store) -> list[dict[str, Any]]:
     return rows
 
 
-# ===========================================================================
-# Cliente
-# ===========================================================================
 
 class SheetsClient:
-    """Cliente con la misma forma que el de Supabase: .table(...) y .rpc(...)."""
 
     def __init__(self, spreadsheet=None):
         self._store = _Store(spreadsheet or get_spreadsheet())
@@ -835,13 +740,10 @@ class SheetsClient:
     def table(self, name: str) -> _Query:
         return _Query(self._store, name)
 
-    # Compatibilidad con supabase-py
     def from_(self, name: str) -> _Query:
         return self.table(name)
 
     def rpc(self, name: str, params: dict[str, Any] | None = None) -> _Query:
-        # La única RPC usada era search_similar_items (búsqueda vectorial).
-        # Sin embeddings devolvemos un resultado vacío de forma controlada.
         q = _Query(self._store, "__rpc__")
         q._op = "rpc"
         q.execute = lambda: _Result([])  # type: ignore[method-assign]

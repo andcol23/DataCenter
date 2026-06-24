@@ -1,10 +1,3 @@
--- ============================================================
--- Migración 003 — Programación de posts + vista de estadísticas pipeline
--- Ejecutar después de 002_sync_sources_and_post_sources.sql
--- ============================================================
-
--- 1) Campo de fecha programada para publicación (opcional)
---    Permite programar un post para publicar en fecha futura
 ALTER TABLE linkedin_posts
     ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMPTZ;
 
@@ -12,8 +5,6 @@ CREATE INDEX IF NOT EXISTS idx_posts_scheduled
     ON linkedin_posts(scheduled_for)
     WHERE scheduled_for IS NOT NULL;
 
--- 2) Campo source_type en la vista de candidatos pendientes para
---    distinguir artículos RSS / Gmail / GDrive en el generator
 DROP VIEW IF EXISTS v_pending_post_candidates;
 
 CREATE VIEW v_pending_post_candidates AS
@@ -46,7 +37,6 @@ WHERE ai.relevance_score >= 0.60
   )
 ORDER BY ai.relevance_score DESC, ai.analyzed_at DESC;
 
--- 3) Vista de estadísticas diarias del pipeline (útil para monitoring)
 CREATE OR REPLACE VIEW v_pipeline_daily_stats AS
 SELECT
     DATE_TRUNC('day', created_at AT TIME ZONE 'Europe/Madrid') AS day,
@@ -66,7 +56,6 @@ FROM raw_items
 GROUP BY 1
 ORDER BY 1 DESC;
 
--- 4) Vista de resumen de posts por estado y formato
 CREATE OR REPLACE VIEW v_post_status_summary AS
 SELECT
     status,
@@ -85,6 +74,5 @@ ORDER BY
     END,
     format;
 
--- 5) Índice para consultas frecuentes del reviewer (filtra por created_at + status)
 CREATE INDEX IF NOT EXISTS idx_posts_status_created
     ON linkedin_posts(status, created_at DESC);

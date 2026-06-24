@@ -1,11 +1,4 @@
-# ============================================================
-# Media Intelligence Hub — Configuración de fuentes
-# ============================================================
-# Edita este archivo para gestionar tus feeds sin tocar código.
-# Los scripts leen esta config y sincronizan con la tabla `sources`.
-
 rss_feeds:
-  # ── OOH / DOOH (priority: high) ────────────────────────────────────────────
   - name: "Digital Signage Today"
     url: "https://www.digitalsignagetoday.com/rss/"
     active: true
@@ -48,7 +41,6 @@ rss_feeds:
     priority: high
     min_relevance: 0.60
 
-  # ── CTV / Streaming (priority: high) ───────────────────────────────────────
   - name: "AdWeek"
     url: "https://www.adweek.com/feed/"
     active: true
@@ -67,7 +59,6 @@ rss_feeds:
     priority: high
     min_relevance: 0.60
 
-  # ── AI / AdTech (priority: high) ───────────────────────────────────────────
   - name: "VentureBeat AI"
     url: "https://venturebeat.com/category/ai/feed/"
     active: true
@@ -86,7 +77,6 @@ rss_feeds:
     priority: high
     min_relevance: 0.60
 
-  # ── General Advertising (priority: medium) ─────────────────────────────────
   - name: "Digiday"
     url: "https://digiday.com/feed/"
     active: true
@@ -171,7 +161,6 @@ rss_feeds:
     priority: medium
     min_relevance: 0.60
 
-  # ── LatAm (priority: medium) ────────────────────────────────────────────────
   - name: "Propmark (Brasil)"
     url: "https://propmark.com.br/feed/"
     active: true
@@ -202,7 +191,6 @@ rss_feeds:
     priority: medium
     min_relevance: 0.60
 
-  # ── Spain (priority: medium) ────────────────────────────────────────────────
   - name: "MarketingDirecto"
     url: "https://www.marketingdirecto.com/feed"
     active: true
@@ -251,7 +239,6 @@ rss_feeds:
     priority: medium
     min_relevance: 0.60
 
-  # ── Europe (priority: medium) ───────────────────────────────────────────────
   - name: "Stratégies"
     url: "https://www.strategies.fr/feed"
     active: true
@@ -276,14 +263,12 @@ rss_feeds:
     priority: medium
     min_relevance: 0.60
 
-  # ── Consumer / Retail (priority: medium) ───────────────────────────────────
   - name: "Food Retail"
     url: "https://foodretail.es/rss"
     active: true
     priority: medium
     min_relevance: 0.60
 
-  # ── Generic Marketing (priority: low — higher filter threshold) ─────────────
   - name: "Campaign Asia"
     url: "https://www.campaignasia.com/rss"
     active: false             # 403 HTTPStatusError

@@ -1,33 +1,24 @@
-# Core
 httpx==0.27.0
 feedparser==6.0.11
 pyyaml==6.0.2
 python-dotenv==1.0.1
 tenacity==8.3.0          # Reintentos con backoff
 
-# Supabase (solo necesario para la migración única a Sheets; se puede quitar después)
 supabase==2.5.3
 
-# Google Sheets (backend de datos — reemplaza a Supabase)
 gspread==6.1.2
 
-# OpenAI
 openai==1.35.13
 
-# Google APIs (Gmail + Drive)
 google-api-python-client==2.134.0
 google-auth-httplib2==0.2.0
 google-auth-oauthlib==1.2.1
 
-# PDF parsing (Google Drive PDFs)
 pypdf==4.2.0
 
-# Text processing
 html2text==2024.2.26     # HTML → Markdown limpio
 chardet==5.2.0
 
-# Logging estructurado
 structlog==24.2.0
 
-# Google Trends
 pytrends==4.9.2

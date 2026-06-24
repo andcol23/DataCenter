@@ -1,9 +1,3 @@
--- ============================================================
--- Migración 002 — Unicidad de fuentes + trazabilidad multi-fuente de posts
--- Ejecutar después de 001_add_taxonomy_columns.sql
--- ============================================================
-
--- 1) Deduplicar sources por (name, type) manteniendo la fila más antigua
 WITH ranked_sources AS (
     SELECT
         id,
@@ -70,11 +64,9 @@ USING ranked_sources rs
 WHERE s.id = rs.id
   AND rs.row_num > 1;
 
--- 2) Asegurar unicidad para soportar upsert_source(name, type)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_name_type
   ON sources(name, type);
 
--- 3) Trazabilidad many-to-many entre linkedin_posts y analyzed_items
 CREATE TABLE IF NOT EXISTS linkedin_post_sources (
     linkedin_post_id UUID NOT NULL REFERENCES linkedin_posts(id) ON DELETE CASCADE,
     analyzed_item_id UUID NOT NULL REFERENCES analyzed_items(id) ON DELETE CASCADE,

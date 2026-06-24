@@ -1,12 +1,3 @@
-"""
-DataCenter — Pipeline Orchestrator
-
-Uso:
-    python -m pipeline run        # fetch (RSS) + analyze
-    python -m pipeline fetch      # solo ingesta RSS
-    python -m pipeline analyze    # solo análisis de raw_items pendientes
-    python -m pipeline status     # estadísticas de la base de datos curada
-"""
 from __future__ import annotations
 
 import sys
@@ -29,7 +20,6 @@ def _configure_logging() -> None:
 
 
 def _timed(label: str, fn: Any, *args: Any, **kwargs: Any) -> Any:
-    """Ejecuta fn y registra el tiempo transcurrido."""
     log.info(f"{label}_start")
     t0 = time.monotonic()
     result = fn(*args, **kwargs)
@@ -39,19 +29,16 @@ def _timed(label: str, fn: Any, *args: Any, **kwargs: Any) -> Any:
 
 
 def cmd_fetch() -> None:
-    """Ingesta: RSS."""
     from ingestion.rss_fetcher import main as rss_main
     _timed("rss_fetcher", rss_main)
 
 
 def cmd_analyze() -> None:
-    """Análisis: procesa raw_items pendientes con OpenAI."""
     from analysis.analyzer import main as analyzer_main
     _timed("analyzer", analyzer_main)
 
 
 def cmd_status() -> None:
-    """Muestra estadísticas de la base de datos curada."""
     try:
         from db.client import get_client
         db = get_client()
@@ -68,13 +55,11 @@ def cmd_status() -> None:
             .execute()
         ).data or []
 
-        # Contar raw_items por status
         raw_counts: dict[str, int] = {}
         for row in raw_stats:
             s = row.get("status", "unknown")
             raw_counts[s] = raw_counts.get(s, 0) + 1
 
-        # Contar analyzed_items por primary_slug
         analyzed_primary: dict[str, int] = {}
         for row in analyzed_stats:
             p = row.get("primary_slug") or "sin-primary"
@@ -100,7 +85,6 @@ def cmd_status() -> None:
 
 
 def cmd_run() -> None:
-    """Pipeline completo: fetch → analyze."""
     log.info("pipeline_run_start")
     t0 = time.monotonic()
 
