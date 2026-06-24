@@ -3,7 +3,7 @@
 -- Ejecutar en Supabase SQL Editor después de 005
 -- ============================================================
 -- Registra el shortlist de temas enviado cada mañana por email,
--- y la respuesta de André con los números aprobados.
+-- y la respuesta del revisor con los números aprobados.
 
 CREATE TABLE IF NOT EXISTS daily_shortlists (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -18,13 +18,13 @@ CREATE TABLE IF NOT EXISTS daily_shortlists (
 );
 
 COMMENT ON TABLE daily_shortlists IS
-    'Un registro por día: shortlist enviado, hilo de Gmail y números aprobados por André.';
+    'Un registro por día: shortlist enviado, hilo de Gmail y números aprobados por el revisor.';
 
 COMMENT ON COLUMN daily_shortlists.items IS
     'Array JSON de {num, analyzed_item_id, title, primary_slug, source_name, ...}';
 
 COMMENT ON COLUMN daily_shortlists.approved_nums IS
-    'Números que André respondió por email (ej: {2,4})';
+    'Números que el revisor respondió por email (ej: {2,4})';
 
 COMMENT ON COLUMN daily_shortlists.status IS
     'sent | replied | generated | expired';

@@ -3,7 +3,7 @@
 -- Ejecutar en Supabase SQL Editor DESPUÉS de 006_daily_shortlists.sql
 -- ============================================================
 -- Cada tema del shortlist diario tiene su propia fila con un
--- campo approved (boolean) que André activa en el Table Editor.
+-- campo approved (boolean) que el revisor activa en el Table Editor.
 -- El job morning inserta con approved=false; el job evening lee
 -- solo las filas donde approved=true.
 
@@ -25,10 +25,10 @@ CREATE TABLE IF NOT EXISTS shortlist_items (
 );
 
 COMMENT ON TABLE shortlist_items IS
-    'Un registro por tema del shortlist diario. André marca la casilla approved para publicar.';
+    'Un registro por tema del shortlist diario. El revisor marca la casilla approved para publicar.';
 
 COMMENT ON COLUMN shortlist_items.approved IS
-    'TRUE si André quiere publicar este tema. El job de las 20:00 lee solo filas con approved=true.';
+    'TRUE si el revisor quiere publicar este tema. El job de las 20:00 lee solo filas con approved=true.';
 
 COMMENT ON COLUMN shortlist_items.num IS
     'Posición del tema en el shortlist del día (1 = más prioritario).';

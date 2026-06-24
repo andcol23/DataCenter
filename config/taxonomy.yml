@@ -1,9 +1,9 @@
 # ============================================================
 # Media Intelligence Hub — Taxonomía de contenidos (v2)
 # ============================================================
-# Reescrita sobre los 7 macro-temas reales del perfil de André Colmenero
-# (andrecolmenero.com): foco en medios, Exterior digital (OOH/DOOH/pDOOH),
-# tecnología y su aplicación publicitaria, AI, automatización, data y consumo.
+# Reescrita sobre 7 macro-temas de media intelligence: medios,
+# Exterior digital (OOH/DOOH/pDOOH), tecnología publicitaria, AI,
+# automatización, data y consumo.
 #
 # Reemplaza la taxonomía "EQOIC Labs" anterior.
 #
@@ -20,7 +20,7 @@ slug_rules:
   - no_accents
   - singular_preferred
 
-# Mercado núcleo de André. El analyzer usa esto para calibrar relevancia:
+# Mercado núcleo del producto. El analyzer usa esto para calibrar relevancia:
 # lo que toca estos temas es señal; lo que no, es periferia.
 market_focus:
   core:

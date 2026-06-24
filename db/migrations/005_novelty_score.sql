@@ -2,7 +2,7 @@
 -- Migración 005 — Score de novedad/recencia en analyzed_items
 -- Ejecutar en Supabase SQL Editor después de 004
 -- ============================================================
--- André prioriza lo más nuevo posible, incluido un dato nuevo sobre un tema
+-- El producto prioriza lo más nuevo posible, incluido un dato nuevo sobre un tema
 -- antiguo. novelty_score (0-1) captura esa frescura, separada de la relevancia.
 
 ALTER TABLE analyzed_items
