@@ -9,8 +9,9 @@ Uso:
     python -m output.daily_digest
 
 Env vars:
-    GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN  (scope: gmail.send)
+    GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN  (scope: gmail.send; fallback Sheets auth)
     GOOGLE_SHEET_ID
+    GOOGLE_SERVICE_ACCOUNT_JSON  — recomendado para Sheets en CI
     DAILY_DIGEST_TO        — destinatario (requerido, sin default)
     MAX_SHORTLIST          — nº de noticias en el correo (default: 5)
     MONDAY_LOOKBACK_HOURS  — override de la ventana del lunes (default: calculada)

@@ -32,6 +32,8 @@ from typing import Any, Iterable
 # gspread / google-auth se importan de forma perezosa dentro de get_spreadsheet()
 # para que importar este módulo no falle si solo se necesitan los esquemas.
 
+SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
+
 
 # ===========================================================================
 # Esquemas de cada pestaña (orden de columnas + tipos)
@@ -216,6 +218,7 @@ def values_to_row(table: str, raw: dict[str, Any]) -> dict[str, Any]:
 def _fetch_access_token() -> str:
     """Obtiene un access token fresco directamente via HTTP, sin pasar por google-auth."""
     import requests as _req
+    import logging
 
     r = _req.post(
         "https://oauth2.googleapis.com/token",
@@ -227,15 +230,68 @@ def _fetch_access_token() -> str:
         },
         timeout=30,
     )
-    r.raise_for_status()
-    return r.json()["access_token"]
+    if not r.ok:
+        raise RuntimeError(
+            f"Error al obtener access token de Google ({r.status_code}): {r.text!r}"
+        )
+    payload = r.json()
+    if "access_token" not in payload:
+        raise RuntimeError(
+            f"Respuesta de token inválida (falta access_token): {payload}"
+        )
+    # Log de diagnóstico: muestra los scopes concedidos al access token.
+    granted_scope = payload.get("scope", "(scope no devuelto por el endpoint)")
+    logging.getLogger(__name__).info("google_token_scopes: %s", granted_scope)
+    print(f"[sheets_backend] token_scopes: {granted_scope}", flush=True)
+    if granted_scope != "(scope no devuelto por el endpoint)":
+        scopes = set(str(granted_scope).split())
+        if SHEETS_SCOPE not in scopes:
+            raise RuntimeError(
+                "El GOOGLE_REFRESH_TOKEN no tiene permiso de Google Sheets. "
+                f"Scopes concedidos: {granted_scope!r}. "
+                "Regenera el secret con `python tools/google_auth.py` o usa "
+                "GOOGLE_SERVICE_ACCOUNT_JSON y comparte el Sheet con esa cuenta."
+            )
+    return payload["access_token"]
 
 
 def get_spreadsheet():
     """Abre el spreadsheet usando un Bearer token directo — sin AuthorizedSession."""
+    import json as _json
     import requests as _req
     import gspread
     from gspread.http_client import HTTPClient
+
+    class _SheetsHTTPClient(HTTPClient):
+        def request(
+            self,
+            method,
+            endpoint,
+            params=None,
+            data=None,
+            json=None,
+            files=None,
+            headers=None,
+        ):
+            response = self.session.request(
+                method=method,
+                url=endpoint,
+                json=json,
+                params=params,
+                data=data,
+                files=files,
+                headers=headers,
+                timeout=self.timeout,
+            )
+            if response.ok:
+                return response
+
+            content_type = response.headers.get("content-type", "")
+            body = response.text[:1000] if response.text else "(empty response body)"
+            raise RuntimeError(
+                f"Sheets API error {response.status_code} [{method.upper()} {endpoint}] "
+                f"content-type={content_type!r}: {body!r}"
+            )
 
     sheet_id = os.environ.get("GOOGLE_SHEET_ID", "").strip()
     if not sheet_id:
@@ -244,6 +300,20 @@ def get_spreadsheet():
             "Es el ID del spreadsheet (la parte de la URL entre /d/ y /edit)."
         )
 
+    service_account_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    if service_account_json:
+        try:
+            service_account_info = _json.loads(service_account_json)
+        except _json.JSONDecodeError as exc:
+            raise RuntimeError(
+                "GOOGLE_SERVICE_ACCOUNT_JSON no es JSON válido. "
+                "Guarda el contenido completo del key JSON como secret."
+            ) from exc
+        return gspread.service_account_from_dict(
+            service_account_info,
+            http_client=_SheetsHTTPClient,
+        ).open_by_key(sheet_id)
+
     access_token = _fetch_access_token()
 
     # Sesión plain-requests con el Bearer hardcodeado: google-auth no interviene
@@ -251,7 +321,7 @@ def get_spreadsheet():
     _session = _req.Session()
     _session.headers["Authorization"] = f"Bearer {access_token}"
 
-    class _BearerHTTPClient(HTTPClient):
+    class _BearerHTTPClient(_SheetsHTTPClient):
         def __init__(self, auth, session=None):
             self.auth = None
             self.timeout = 120

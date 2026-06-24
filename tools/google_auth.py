@@ -8,7 +8,7 @@ Requiere en .env (o env vars):
     GOOGLE_CLIENT_ID
     GOOGLE_CLIENT_SECRET
 
-Scopes configurados: Gmail (readonly) + Drive (readonly)
+Scopes configurados: Gmail send + Google Sheets.
 
 El script abre el navegador para autenticación, recibe el callback en localhost:8080,
 e imprime el refresh_token para añadir a .env como GOOGLE_REFRESH_TOKEN.
@@ -31,9 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 load_dotenv()
 
 SCOPES = [
-    "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.send",
-    "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/spreadsheets",  # lectura/escritura en Google Sheets (backend de datos)
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",  # para saber qué cuenta quedó autorizada

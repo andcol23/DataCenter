@@ -43,14 +43,24 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Verify Google Sheets access
+        if: env.DRY_RUN != 'true'
+        env:
+          GOOGLE_CLIENT_ID:           ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET:       ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN:       ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: python tools/verify_sheets.py
+
       - name: Run RSS Fetcher
         env:
-          GOOGLE_CLIENT_ID:     ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
-          OPENAI_API_KEY:       ${{ secrets.OPENAI_API_KEY }}
-          DRY_RUN:              ${{ env.DRY_RUN }}
-          GITHUB_RUN_ID:        ${{ github.run_id }}
+          GOOGLE_CLIENT_ID:           ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET:       ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN:       ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          OPENAI_API_KEY:             ${{ secrets.OPENAI_API_KEY }}
+          DRY_RUN:                    ${{ env.DRY_RUN }}
+          GITHUB_RUN_ID:              ${{ github.run_id }}
         run: |
           python -m ingestion.rss_fetcher 2>&1 | tee fetcher.log
           exit ${PIPESTATUS[0]}
@@ -103,15 +113,16 @@ jobs:
 
       - name: Run Analyzer
         env:
-          GOOGLE_CLIENT_ID:     ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
-          OPENAI_API_KEY:       ${{ secrets.OPENAI_API_KEY }}
-          DRY_RUN:              ${{ env.DRY_RUN }}
-          BATCH_SIZE:           "10"
-          MAX_AGE_DAYS:         "7"
-          MAX_ITEMS_PER_RUN:    "60"
-          GITHUB_RUN_ID:        ${{ github.run_id }}
+          GOOGLE_CLIENT_ID:           ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET:       ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN:       ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          OPENAI_API_KEY:             ${{ secrets.OPENAI_API_KEY }}
+          DRY_RUN:                    ${{ env.DRY_RUN }}
+          BATCH_SIZE:                 "10"
+          MAX_AGE_DAYS:               "7"
+          MAX_ITEMS_PER_RUN:          "60"
+          GITHUB_RUN_ID:              ${{ github.run_id }}
         run: |
           python -m analysis.analyzer 2>&1 | tee analyzer.log
           exit ${PIPESTATUS[0]}
@@ -148,8 +159,8 @@ jobs:
     name: "Send Daily Digest Email"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: analyze
-    if: always() && needs.analyze.result != 'cancelled'
+    needs: [fetch-rss, analyze]
+    if: always() && needs.fetch-rss.result == 'success' && needs.analyze.result != 'cancelled'
 
     steps:
       - name: Checkout
@@ -166,12 +177,13 @@ jobs:
 
       - name: Send Daily Digest
         env:
-          GOOGLE_CLIENT_ID:     ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
-          DAILY_DIGEST_TO:      ${{ secrets.DAILY_DIGEST_TO }}
-          MAX_SHORTLIST:        "5"
-          DRY_RUN:              ${{ env.DRY_RUN }}
+          GOOGLE_CLIENT_ID:           ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET:       ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN:       ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          DAILY_DIGEST_TO:            ${{ secrets.DAILY_DIGEST_TO }}
+          MAX_SHORTLIST:              "5"
+          DRY_RUN:                    ${{ env.DRY_RUN }}
         run: |
           python -m output.daily_digest 2>&1 | tee digest.log
           exit ${PIPESTATUS[0]}

@@ -5,7 +5,7 @@ Uso:
     python tools/verify_sheets.py
 
 Comprueba, en este orden:
-  1. Qué cuenta de Google está autorizada por el token (email).
+  1. Qué cuenta de Google está autorizada por el token o service account.
   2. Que puede abrir el spreadsheet (GOOGLE_SHEET_ID).
   3. Que puede ESCRIBIR (crea una pestaña temporal, escribe y la borra).
 
@@ -13,6 +13,7 @@ Si algo falla, el error te dice exactamente qué arreglar.
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -22,6 +23,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from dotenv import load_dotenv
 
 load_dotenv()
+
+SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 
 
 def _credentials():
@@ -40,21 +43,92 @@ def _credentials():
     )
 
 
-def main() -> None:
-    print("\n=== Verificación de acceso a Google Sheets ===\n")
+def _print_refresh_token_scopes() -> None:
+    import requests
 
-    sheet_id = os.getenv("GOOGLE_SHEET_ID", "").strip()
-    if not sheet_id:
-        print("✗ Falta GOOGLE_SHEET_ID en .env")
+    r = requests.post(
+        "https://oauth2.googleapis.com/token",
+        data={
+            "grant_type": "refresh_token",
+            "client_id": os.environ["GOOGLE_CLIENT_ID"].strip(),
+            "client_secret": os.environ["GOOGLE_CLIENT_SECRET"].strip(),
+            "refresh_token": os.environ["GOOGLE_REFRESH_TOKEN"].strip(),
+        },
+        timeout=30,
+    )
+    if not r.ok:
+        print(f"\n✗ No se pudo refrescar el token de Google ({r.status_code}).")
+        print(f"  Respuesta: {r.text[:500]}")
         sys.exit(1)
 
+    granted_scope = r.json().get("scope", "")
+    print(f"  Scopes concedidos por el token: {granted_scope or '(no devuelto)'}")
+    if granted_scope and SHEETS_SCOPE not in set(granted_scope.split()):
+        print("\n✗ El GOOGLE_REFRESH_TOKEN no incluye el scope de Google Sheets.")
+        print(f"  Falta: {SHEETS_SCOPE}")
+        print("  → Regenera GOOGLE_REFRESH_TOKEN con `python tools/google_auth.py`")
+        print("    o usa GOOGLE_SERVICE_ACCOUNT_JSON en GitHub Actions.")
+        sys.exit(1)
+
+
+def _open_spreadsheet(sheet_id: str):
+    import gspread
+    from gspread.http_client import HTTPClient
+
+    class _SheetsHTTPClient(HTTPClient):
+        def request(
+            self,
+            method,
+            endpoint,
+            params=None,
+            data=None,
+            json=None,
+            files=None,
+            headers=None,
+        ):
+            response = self.session.request(
+                method=method,
+                url=endpoint,
+                json=json,
+                params=params,
+                data=data,
+                files=files,
+                headers=headers,
+                timeout=self.timeout,
+            )
+            if response.ok:
+                return response
+            body = response.text[:1000] if response.text else "(empty response body)"
+            raise RuntimeError(
+                f"Sheets API error {response.status_code} [{method.upper()} {endpoint}]: {body!r}"
+            )
+
+    service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    if service_account_json:
+        try:
+            service_account_info = json.loads(service_account_json)
+        except json.JSONDecodeError as exc:
+            print("\n✗ GOOGLE_SERVICE_ACCOUNT_JSON no es JSON válido.")
+            print(f"  Motivo: {exc}")
+            sys.exit(1)
+
+        email = service_account_info.get("client_email", "(sin client_email)")
+        print(f"  Modo auth: service account")
+        print(f"  Cuenta autorizada: {email}")
+        gc = gspread.service_account_from_dict(
+            service_account_info,
+            http_client=_SheetsHTTPClient,
+        )
+        return gc.open_by_key(sheet_id), email
+
+    print("  Modo auth: OAuth refresh token")
+    _print_refresh_token_scopes()
     creds = _credentials()
 
-    # 1) ¿Qué cuenta es?
     try:
         import google.auth.transport.requests as gar
         creds.refresh(gar.Request())
-        import urllib.request, json
+        import urllib.request
         req = urllib.request.Request(
             "https://www.googleapis.com/oauth2/v3/userinfo",
             headers={"Authorization": f"Bearer {creds.token}"},
@@ -68,14 +142,31 @@ def main() -> None:
         print(f"  Aviso: no se pudo leer el email de la cuenta ({exc})")
         print("  (Puede que falte el scope userinfo.email; no es bloqueante.)")
 
+    gc = gspread.Client(auth=creds, http_client=_SheetsHTTPClient)
+    return gc.open_by_key(sheet_id), email
+
+
+def main() -> None:
+    print("\n=== Verificación de acceso a Google Sheets ===\n")
+
+    sheet_id = os.getenv("GOOGLE_SHEET_ID", "").strip()
+    if not sheet_id:
+        print("✗ Falta GOOGLE_SHEET_ID en .env")
+        sys.exit(1)
+
     # 2) Abrir el spreadsheet
+    email = "(desconocida)"
     try:
-        import gspread
-        gc = gspread.authorize(creds)
-        ss = gc.open_by_key(sheet_id)
+        ss, email = _open_spreadsheet(sheet_id)
         print(f"  ✓ Spreadsheet abierto: '{ss.title}'")
         tabs = [ws.title for ws in ss.worksheets()]
         print(f"    Pestañas actuales ({len(tabs)}): {tabs}")
+        for required_tab in ("sources", "raw_items", "analyzed_items"):
+            ws = ss.worksheet(required_tab)
+            header = ws.row_values(1)
+            if not header:
+                raise RuntimeError(f"La pestaña {required_tab!r} no tiene cabecera en fila 1.")
+            print(f"    ✓ Lectura OK: {required_tab} ({len(header)} columnas)")
     except Exception as exc:
         print(f"\n✗ NO se pudo abrir el spreadsheet.")
         print(f"  Motivo: {exc}")
@@ -87,7 +178,8 @@ def main() -> None:
 
     # 3) Probar ESCRITURA (pestaña temporal)
     try:
-        tmp = ss.add_worksheet(title="__verify_tmp__", rows=2, cols=2)
+        tmp_title = f"__verify_tmp_{os.getenv('GITHUB_RUN_ID', os.getpid())}__"
+        tmp = ss.add_worksheet(title=tmp_title, rows=2, cols=2)
         tmp.update([["ok"]], "A1")
         ss.del_worksheet(tmp)
         print("  ✓ Permiso de ESCRITURA confirmado (creó/escribió/borró una pestaña de prueba)")
