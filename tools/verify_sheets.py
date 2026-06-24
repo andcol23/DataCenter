@@ -27,6 +27,27 @@ load_dotenv()
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 
 
+def _first_row_from_grid_metadata(ss, worksheet) -> list[str]:
+    metadata = ss.fetch_sheet_metadata(
+        params={"includeGridData": "true", "ranges": [f"'{worksheet.title}'!A1:Z1"]}
+    )
+    sheet = next(
+        (
+            s
+            for s in metadata.get("sheets", [])
+            if s.get("properties", {}).get("sheetId") == worksheet.id
+        ),
+        None,
+    )
+    row_data = ((sheet or {}).get("data") or [{}])[0].get("rowData") or []
+    cells = row_data[0].get("values", []) if row_data else []
+    values: list[str] = []
+    for cell in cells:
+        effective = cell.get("effectiveValue") or {}
+        values.append(str(next(iter(effective.values()), "")))
+    return values
+
+
 def _credentials():
     from google.oauth2.credentials import Credentials
     return Credentials(
@@ -162,11 +183,8 @@ def main() -> None:
         tabs = [ws.title for ws in ss.worksheets()]
         print(f"    Pestañas actuales ({len(tabs)}): {tabs}")
         for required_tab in ("sources", "raw_items", "analyzed_items"):
-            ss.worksheet(required_tab)
-            response = ss.values_batch_get([f"'{required_tab}'!A1:Z1"])
-            value_ranges = response.get("valueRanges") or []
-            values = value_ranges[0].get("values", []) if value_ranges else []
-            header = values[0] if values else []
+            ws = ss.worksheet(required_tab)
+            header = _first_row_from_grid_metadata(ss, ws)
             if not header:
                 raise RuntimeError(f"La pestaña {required_tab!r} no tiene cabecera en fila 1.")
             print(f"    ✓ Lectura OK: {required_tab} ({len(header)} columnas)")
@@ -183,7 +201,29 @@ def main() -> None:
     try:
         tmp_title = f"__verify_tmp_{os.getenv('GITHUB_RUN_ID', os.getpid())}__"
         tmp = ss.add_worksheet(title=tmp_title, rows=2, cols=2)
-        tmp.update([["ok"]], "A1")
+        ss.batch_update(
+            {
+                "requests": [
+                    {
+                        "updateCells": {
+                            "start": {
+                                "sheetId": tmp.id,
+                                "rowIndex": 0,
+                                "columnIndex": 0,
+                            },
+                            "rows": [
+                                {
+                                    "values": [
+                                        {"userEnteredValue": {"stringValue": "ok"}}
+                                    ]
+                                }
+                            ],
+                            "fields": "userEnteredValue",
+                        }
+                    }
+                ]
+            }
+        )
         ss.del_worksheet(tmp)
         print("  ✓ Permiso de ESCRITURA confirmado (creó/escribió/borró una pestaña de prueba)")
     except Exception as exc:

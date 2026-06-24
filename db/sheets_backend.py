@@ -211,6 +211,31 @@ def values_to_row(table: str, raw: dict[str, Any]) -> dict[str, Any]:
     return {c: deserialize_cell(table, c, raw.get(c, "")) for c in cols}
 
 
+def _cell_to_value(cell: dict[str, Any]) -> Any:
+    """Extrae un valor Python desde CellData de spreadsheets.get."""
+    effective = cell.get("effectiveValue") or {}
+    if "stringValue" in effective:
+        return effective["stringValue"]
+    if "numberValue" in effective:
+        return effective["numberValue"]
+    if "boolValue" in effective:
+        return effective["boolValue"]
+    if "formulaValue" in effective:
+        return effective["formulaValue"]
+    return ""
+
+
+def _value_to_cell(value: Any) -> dict[str, Any]:
+    """Convierte un valor Python en CellData para spreadsheets.batchUpdate."""
+    if value is None or value == "":
+        return {}
+    if isinstance(value, bool):
+        return {"userEnteredValue": {"boolValue": value}}
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return {"userEnteredValue": {"numberValue": value}}
+    return {"userEnteredValue": {"stringValue": str(value)}}
+
+
 # ===========================================================================
 # Conexión a Google Sheets
 # ===========================================================================
@@ -351,12 +376,22 @@ class _Store:
 
     def _load(self, table: str) -> None:
         ws = self.worksheet(table)
-        response = self.ss.values_batch_get(
-            [f"'{table}'!A:Z"],
-            params={"valueRenderOption": "UNFORMATTED_VALUE"},
+        metadata = self.ss.fetch_sheet_metadata(
+            params={"includeGridData": "true", "ranges": [f"'{table}'!A:Z"]}
         )
-        value_ranges = response.get("valueRanges") or []
-        values = value_ranges[0].get("values", []) if value_ranges else []
+        sheet = next(
+            (
+                s
+                for s in metadata.get("sheets", [])
+                if s.get("properties", {}).get("sheetId") == ws.id
+            ),
+            None,
+        )
+        row_data = ((sheet or {}).get("data") or [{}])[0].get("rowData") or []
+        values = [
+            [_cell_to_value(cell) for cell in row.get("values", [])]
+            for row in row_data
+        ]
         header = values[0] if values else []
         recs: list[dict[str, Any]] = []
         rownums: list[int] = []
@@ -377,14 +412,28 @@ class _Store:
 
     def append(self, table: str, row: dict[str, Any]) -> dict[str, Any]:
         recs = self.records(table)
+        ws = self.worksheet(table)
         rownum = len(recs) + 2
-        self.ss.values_batch_update(
+        self.ss.batch_update(
             {
-                "valueInputOption": "RAW",
-                "data": [
+                "requests": [
                     {
-                        "range": f"'{table}'!A{rownum}",
-                        "values": [row_to_values(table, row)],
+                        "updateCells": {
+                            "start": {
+                                "sheetId": ws.id,
+                                "rowIndex": rownum - 1,
+                                "columnIndex": 0,
+                            },
+                            "rows": [
+                                {
+                                    "values": [
+                                        _value_to_cell(value)
+                                        for value in row_to_values(table, row)
+                                    ]
+                                }
+                            ],
+                            "fields": "userEnteredValue",
+                        }
                     }
                 ],
             }
@@ -395,14 +444,28 @@ class _Store:
 
     def update_at(self, table: str, idx: int, row: dict[str, Any]) -> dict[str, Any]:
         recs = self.records(table)
+        ws = self.worksheet(table)
         rownum = self._rownums[table][idx]
-        self.ss.values_batch_update(
+        self.ss.batch_update(
             {
-                "valueInputOption": "RAW",
-                "data": [
+                "requests": [
                     {
-                        "range": f"'{table}'!A{rownum}",
-                        "values": [row_to_values(table, row)],
+                        "updateCells": {
+                            "start": {
+                                "sheetId": ws.id,
+                                "rowIndex": rownum - 1,
+                                "columnIndex": 0,
+                            },
+                            "rows": [
+                                {
+                                    "values": [
+                                        _value_to_cell(value)
+                                        for value in row_to_values(table, row)
+                                    ]
+                                }
+                            ],
+                            "fields": "userEnteredValue",
+                        }
                     }
                 ],
             }
