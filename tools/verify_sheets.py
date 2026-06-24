@@ -162,8 +162,10 @@ def main() -> None:
         tabs = [ws.title for ws in ss.worksheets()]
         print(f"    Pestañas actuales ({len(tabs)}): {tabs}")
         for required_tab in ("sources", "raw_items", "analyzed_items"):
-            ws = ss.worksheet(required_tab)
-            values = ws.get_all_values(range_name="A1:Z1")
+            ss.worksheet(required_tab)
+            response = ss.values_batch_get([f"'{required_tab}'!A1:Z1"])
+            value_ranges = response.get("valueRanges") or []
+            values = value_ranges[0].get("values", []) if value_ranges else []
             header = values[0] if values else []
             if not header:
                 raise RuntimeError(f"La pestaña {required_tab!r} no tiene cabecera en fila 1.")

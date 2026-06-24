@@ -351,7 +351,12 @@ class _Store:
 
     def _load(self, table: str) -> None:
         ws = self.worksheet(table)
-        values = ws.get_all_values(value_render_option="UNFORMATTED_VALUE")
+        response = self.ss.values_batch_get(
+            [f"'{table}'!A:Z"],
+            params={"valueRenderOption": "UNFORMATTED_VALUE"},
+        )
+        value_ranges = response.get("valueRanges") or []
+        values = value_ranges[0].get("values", []) if value_ranges else []
         header = values[0] if values else []
         recs: list[dict[str, Any]] = []
         rownums: list[int] = []
@@ -372,12 +377,17 @@ class _Store:
 
     def append(self, table: str, row: dict[str, Any]) -> dict[str, Any]:
         recs = self.records(table)
-        ws = self.worksheet(table)
         rownum = len(recs) + 2
-        ws.update(
-            [row_to_values(table, row)],
-            f"A{rownum}",
-            value_input_option="RAW",
+        self.ss.values_batch_update(
+            {
+                "valueInputOption": "RAW",
+                "data": [
+                    {
+                        "range": f"'{table}'!A{rownum}",
+                        "values": [row_to_values(table, row)],
+                    }
+                ],
+            }
         )
         recs.append(dict(row))
         self._rownums[table].append(rownum)
@@ -386,11 +396,16 @@ class _Store:
     def update_at(self, table: str, idx: int, row: dict[str, Any]) -> dict[str, Any]:
         recs = self.records(table)
         rownum = self._rownums[table][idx]
-        ws = self.worksheet(table)
-        ws.update(
-            [row_to_values(table, row)],
-            f"A{rownum}",
-            value_input_option="RAW",
+        self.ss.values_batch_update(
+            {
+                "valueInputOption": "RAW",
+                "data": [
+                    {
+                        "range": f"'{table}'!A{rownum}",
+                        "values": [row_to_values(table, row)],
+                    }
+                ],
+            }
         )
         recs[idx] = dict(row)
         return dict(row)
