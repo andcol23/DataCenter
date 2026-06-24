@@ -92,18 +92,34 @@ def _lookback_hours_for_today(now: datetime | None = None) -> int:
 # ── Gmail (solo envío) ─────────────────────────────────────────────────────────
 
 def _gmail_service() -> Any:
-    from google.auth.transport.requests import Request
+    import requests as _req
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
 
-    creds = Credentials(
-        token=None,
-        refresh_token=os.environ["GOOGLE_REFRESH_TOKEN"],
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=os.environ["GOOGLE_CLIENT_ID"],
-        client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
+    client_id     = os.environ["GOOGLE_CLIENT_ID"].strip()
+    client_secret = os.environ["GOOGLE_CLIENT_SECRET"].strip()
+    refresh_token = os.environ["GOOGLE_REFRESH_TOKEN"].strip()
+
+    r = _req.post(
+        "https://oauth2.googleapis.com/token",
+        data={
+            "grant_type":    "refresh_token",
+            "client_id":     client_id,
+            "client_secret": client_secret,
+            "refresh_token": refresh_token,
+        },
+        timeout=30,
     )
-    creds.refresh(Request())
+    r.raise_for_status()
+    data = r.json()
+
+    creds = Credentials(
+        token=data["access_token"],
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=client_id,
+        client_secret=client_secret,
+    )
     return build("gmail", "v1", credentials=creds)
 
 
