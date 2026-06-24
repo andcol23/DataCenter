@@ -96,30 +96,21 @@ def _gmail_service() -> Any:
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
 
-    client_id     = os.environ["GOOGLE_CLIENT_ID"].strip()
-    client_secret = os.environ["GOOGLE_CLIENT_SECRET"].strip()
-    refresh_token = os.environ["GOOGLE_REFRESH_TOKEN"].strip()
-
     r = _req.post(
         "https://oauth2.googleapis.com/token",
         data={
             "grant_type":    "refresh_token",
-            "client_id":     client_id,
-            "client_secret": client_secret,
-            "refresh_token": refresh_token,
+            "client_id":     os.environ["GOOGLE_CLIENT_ID"].strip(),
+            "client_secret": os.environ["GOOGLE_CLIENT_SECRET"].strip(),
+            "refresh_token": os.environ["GOOGLE_REFRESH_TOKEN"].strip(),
         },
         timeout=30,
     )
     r.raise_for_status()
-    data = r.json()
+    access_token = r.json()["access_token"]
 
-    creds = Credentials(
-        token=data["access_token"],
-        refresh_token=refresh_token,
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=client_id,
-        client_secret=client_secret,
-    )
+    # Credentials con token ya fresco: googleapiclient no necesita refrescar.
+    creds = Credentials(token=access_token)
     return build("gmail", "v1", credentials=creds)
 
 

@@ -213,43 +213,29 @@ def values_to_row(table: str, raw: dict[str, Any]) -> dict[str, Any]:
 # Conexión a Google Sheets
 # ===========================================================================
 
-def _fresh_google_creds() -> "Credentials":
-    """Refresca el OAuth token directamente via HTTP para evitar el flujo reauth
-    de google-auth 2.x que en algunos entornos devuelve scopes reducidos."""
+def _fetch_access_token() -> str:
+    """Obtiene un access token fresco directamente via HTTP, sin pasar por google-auth."""
     import requests as _req
-    from google.oauth2.credentials import Credentials
-
-    client_id     = os.environ["GOOGLE_CLIENT_ID"].strip()
-    client_secret = os.environ["GOOGLE_CLIENT_SECRET"].strip()
-    refresh_token = os.environ["GOOGLE_REFRESH_TOKEN"].strip()
 
     r = _req.post(
         "https://oauth2.googleapis.com/token",
         data={
             "grant_type":    "refresh_token",
-            "client_id":     client_id,
-            "client_secret": client_secret,
-            "refresh_token": refresh_token,
+            "client_id":     os.environ["GOOGLE_CLIENT_ID"].strip(),
+            "client_secret": os.environ["GOOGLE_CLIENT_SECRET"].strip(),
+            "refresh_token": os.environ["GOOGLE_REFRESH_TOKEN"].strip(),
         },
         timeout=30,
     )
     r.raise_for_status()
-    data = r.json()
-
-    # Sin expiry: google-auth no intentará refrescar el token durante el run
-    # (evita TypeError de offset-naive vs aware datetimes en algunas versiones).
-    return Credentials(
-        token=data["access_token"],
-        refresh_token=refresh_token,
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=client_id,
-        client_secret=client_secret,
-    )
+    return r.json()["access_token"]
 
 
 def get_spreadsheet():
-    """Abre el spreadsheet configurado usando el refresh_token OAuth de Google."""
+    """Abre el spreadsheet usando un Bearer token directo — sin AuthorizedSession."""
+    import requests as _req
     import gspread
+    from gspread.http_client import HTTPClient
 
     sheet_id = os.environ.get("GOOGLE_SHEET_ID", "").strip()
     if not sheet_id:
@@ -258,7 +244,20 @@ def get_spreadsheet():
             "Es el ID del spreadsheet (la parte de la URL entre /d/ y /edit)."
         )
 
-    gc = gspread.authorize(_fresh_google_creds())
+    access_token = _fetch_access_token()
+
+    # Sesión plain-requests con el Bearer hardcodeado: google-auth no interviene
+    # en ninguna petición, eliminando el riesgo de reauth que trunca los scopes.
+    _session = _req.Session()
+    _session.headers["Authorization"] = f"Bearer {access_token}"
+
+    class _BearerHTTPClient(HTTPClient):
+        def __init__(self, auth, session=None):
+            self.auth = None
+            self.timeout = 120
+            self.session = _session  # ignoramos auth/session: usamos el Bearer directo
+
+    gc = gspread.Client(auth=None, http_client=_BearerHTTPClient)
     return gc.open_by_key(sheet_id)
 
 
