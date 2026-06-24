@@ -351,12 +351,15 @@ class _Store:
 
     def _load(self, table: str) -> None:
         ws = self.worksheet(table)
-        raw_records = ws.get_all_records(
-            value_render_option="UNFORMATTED_VALUE", default_blank=""
-        )
+        values = ws.get_all_values(value_render_option="UNFORMATTED_VALUE")
+        header = values[0] if values else []
         recs: list[dict[str, Any]] = []
         rownums: list[int] = []
-        for i, raw in enumerate(raw_records):
+        for i, row in enumerate(values[1:]):
+            raw = {
+                col: row[idx] if idx < len(row) else ""
+                for idx, col in enumerate(header)
+            }
             recs.append(values_to_row(table, raw))
             rownums.append(i + 2)  # fila 1 = cabecera
         self._records[table] = recs

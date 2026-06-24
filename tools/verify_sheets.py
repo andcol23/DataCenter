@@ -163,7 +163,8 @@ def main() -> None:
         print(f"    Pestañas actuales ({len(tabs)}): {tabs}")
         for required_tab in ("sources", "raw_items", "analyzed_items"):
             ws = ss.worksheet(required_tab)
-            header = ws.row_values(1)
+            values = ws.get_all_values(range_name="A1:Z1")
+            header = values[0] if values else []
             if not header:
                 raise RuntimeError(f"La pestaña {required_tab!r} no tiene cabecera en fila 1.")
             print(f"    ✓ Lectura OK: {required_tab} ({len(header)} columnas)")
