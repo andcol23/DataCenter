@@ -111,6 +111,7 @@ jobs:
           BATCH_SIZE:                 "10"
           MAX_AGE_DAYS:               "7"
           MAX_ITEMS_PER_RUN:          "60"
+          CURATION_MIN_RELEVANCE:     "0.60"
           GITHUB_RUN_ID:              ${{ github.run_id }}
         run: |
           python -m analysis.analyzer 2>&1 | tee analyzer.log

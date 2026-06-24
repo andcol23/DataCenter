@@ -36,11 +36,22 @@ DOOH_TERMS = (
     "dooh", "ooh", "out of home", "out-of-home", "exterior digital", "media exterior",
     "digital signage", "programmatic dooh", "pdooh", "outdoor advertising",
 )
+STRATEGIC_TERMS = (
+    "programmatic", "programática", "adtech", "dsp", "ssp", "retail media",
+    "in-store media", "ai advertising", "ia aplicada", "dco", "audience measurement",
+    "medición", "attribution", "atribución", "brand lift", "incrementality",
+    "incrementalidad", "clean room", "cookieless", "first-party data",
+)
 DATA_MARKET_TERMS = (
     "warc", "infoadex", "kantar", "magna", "nielsen", "iab", "estudio", "study",
     "forecast", "informe", "report", "adspend", "inversión publicitaria",
 )
 SPAIN_TERMS = ("spain", "españa", "espana", "mercado español")
+GENERIC_NEWS_TERMS = (
+    "award", "awards", "premio", "premios", "jurado", "jury", "cannes",
+    "nombramiento", "appointed", "account win", "wins account", "cuenta",
+    "campaign launch", "nueva campaña", "brand campaign", "patrocinio",
+)
 RESEARCH_SOURCES = {
     "WARC", "InfoAdex", "Kantar", "Kantar Media", "MAGNA", "Nielsen Insights",
     "eMarketer", "IAB Spain", "IAB (Industry News)", "Think with Google",
@@ -138,11 +149,30 @@ def _priority(item: dict[str, Any]) -> float:
     score += float(item.get("novelty_score") or 0) * 35
 
     if _has_any(text, DOOH_TERMS) or item.get("secondary_slug") == "ooh-dooh":
-        score += 20
+        score += 28
+    if _has_any(text, STRATEGIC_TERMS) or item.get("secondary_slug") in {
+        "programmatic", "adtech", "ai-advertising", "retail-media",
+        "audience-measurement", "attribution", "market-research", "adspend",
+    }:
+        score += 22
     if (item.get("source_name") or "") in RESEARCH_SOURCES or _has_any(text, DATA_MARKET_TERMS):
-        score += 18
+        score += 22
     if _has_any(text, SPAIN_TERMS):
-        score += 12
+        score += 18
+    if item.get("secondary_slug") == "industry-news" and not (
+        _has_any(text, DOOH_TERMS)
+        or _has_any(text, STRATEGIC_TERMS)
+        or _has_any(text, DATA_MARKET_TERMS)
+        or _has_any(text, SPAIN_TERMS)
+    ):
+        score -= 35
+    if _has_any(text, GENERIC_NEWS_TERMS) and not (
+        _has_any(text, DOOH_TERMS)
+        or _has_any(text, STRATEGIC_TERMS)
+        or _has_any(text, DATA_MARKET_TERMS)
+        or _has_any(text, SPAIN_TERMS)
+    ):
+        score -= 25
     return score
 
 

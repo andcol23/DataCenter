@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from analysis.analyzer import _validate_taxonomy
+from analysis.analyzer import _adjust_relevance, _validate_taxonomy
 
 
 class AnalyzerTaxonomyTests(unittest.TestCase):
@@ -73,6 +73,34 @@ class AnalyzerTaxonomyTests(unittest.TestCase):
         self.assertEqual(result.primary_slug, "tech-innovation")
         self.assertIsNone(result.secondary_slug)
         self.assertTrue(any("secondary_slug" in e for e in result.errors))
+
+    def test_adjust_relevance_caps_generic_industry_news(self) -> None:
+        taxonomy = _validate_taxonomy({
+            "primary_slug": "media-advertising",
+            "secondary_slug": "industry-news",
+            "keywords": ["trend/account-move"],
+        })
+        score = _adjust_relevance(
+            0.72,
+            {"title": "Agency wins new account", "body_text": "The agency was appointed after a pitch."},
+            {"resumen": "Una agencia gana una cuenta tras un pitch corporativo."},
+            taxonomy,
+        )
+        self.assertLessEqual(score, 0.55)
+
+    def test_adjust_relevance_boosts_core_media_signal(self) -> None:
+        taxonomy = _validate_taxonomy({
+            "primary_slug": "media-advertising",
+            "secondary_slug": "ooh-dooh",
+            "keywords": ["channel/dooh", "metric/footfall"],
+        })
+        score = _adjust_relevance(
+            0.62,
+            {"title": "DOOH campaign improves footfall in Spain", "body_text": "Digital signage and footfall measurement."},
+            {"resumen": "Una campaña DOOH en España mejora medición de visitas."},
+            taxonomy,
+        )
+        self.assertGreaterEqual(score, 0.75)
 
 
 if __name__ == "__main__":

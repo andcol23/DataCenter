@@ -38,7 +38,7 @@ DRY_RUN      = os.getenv("DRY_RUN", "false").lower() == "true"
 BATCH_SIZE   = int(os.getenv("BATCH_SIZE", "10"))
 MAX_AGE_DAYS = int(os.getenv("MAX_AGE_DAYS", "7"))    # solo analizar items de los últimos N días
 MAX_ITEMS_PER_RUN = int(os.getenv("MAX_ITEMS_PER_RUN", "60"))
-CURATION_MIN_RELEVANCE = float(os.getenv("CURATION_MIN_RELEVANCE", "0.5"))
+CURATION_MIN_RELEVANCE = float(os.getenv("CURATION_MIN_RELEVANCE", "0.6"))
 MODEL        = "gpt-4o-mini"
 REQUIRE_VALID_TAXONOMY = os.getenv("REQUIRE_VALID_TAXONOMY", "true").lower() == "true"
 
@@ -104,6 +104,26 @@ NOISE_TERMS: tuple[str, ...] = tuple(
     }
 )
 
+CORE_SIGNAL_TERMS: tuple[str, ...] = (
+    "ooh", "dooh", "pdooh", "out of home", "out-of-home", "exterior digital",
+    "digital signage", "programmatic", "programática", "adtech", "dsp", "ssp",
+    "retail media", "in-store media", "audience measurement", "medición",
+    "attribution", "atribución", "brand lift", "incrementality",
+    "incrementalidad", "iab", "infoadex", "kantar", "nielsen", "warc",
+    "magna", "adspend", "inversión publicitaria", "ai advertising",
+    "ia aplicada", "dco", "clean room", "cookieless", "first-party data",
+)
+GENERIC_NEWS_TERMS: tuple[str, ...] = (
+    "award", "awards", "premio", "premios", "jurado", "jury", "cannes",
+    "nombramiento", "nombrado", "appointed", "hire", "hired", "cuenta",
+    "account win", "wins account", "campaign launch", "lanza campaña",
+    "nueva campaña", "brand campaign", "celebrity", "patrocinio",
+)
+SPAIN_EUROPE_TERMS: tuple[str, ...] = (
+    "españa", "spain", "spanish", "madrid", "barcelona", "europa", "europe",
+    "european", "emea", "ue", "eu ",
+)
+
 
 def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
     for term in terms:
@@ -138,9 +158,15 @@ Tu trabajo es curar: separar señal de ruido y clasificar con precisión.
 
 Reglas de relevance_score (0-1):
 - 0.80+ : tema CORE (OOH/DOOH/pDOOH, programática, adtech, IA aplicada a publicidad, \
-retail media, medición de audiencias) o noticia destacada del mercado publicitario español/europeo.
-- 0.60-0.79 : tema de CONTEXTO con conexión clara a publicidad/medios.
-- < 0.50 : periferia sin ángulo publicitario explícito.
+retail media, medición de audiencias, inversión publicitaria, estudios IAB/InfoAdex/Kantar/Nielsen/WARC) \
+o noticia destacada del mercado publicitario español/europeo.
+- 0.60-0.79 : tema de CONTEXTO con conexión clara, accionable y específica a publicidad/medios.
+- < 0.60 : campañas genéricas de marca, premios, nombramientos, cuentas ganadas, patrocinios o noticias \
+corporativas sin aprendizaje claro de medios, datos, tecnología, medición o mercado.
+- industry-news solo puede superar 0.60 si tiene señal explícita de OOH/DOOH, programática, adtech, \
+retail media, medición, inversión, España/Europa o un insight estratégico útil.
+- campañas creativas de marcas solo pueden superar 0.60 si aportan una lección clara sobre medio, formato, \
+medición, performance, inversión o comportamiento del consumidor.
 - Mercado de un país solo es relevante si es España, global, Europa, o comparable con España.
 
 Responde ÚNICAMENTE con el JSON solicitado, sin texto adicional ni markdown.
@@ -298,6 +324,40 @@ def _clamp01(value: Any) -> float | None:
         return None
 
 
+def _score_text(raw: dict[str, Any], data: dict[str, Any], taxonomy: TaxonomyValidation) -> str:
+    parts = [
+        raw.get("title") or "",
+        raw.get("body_text") or raw.get("body_html") or "",
+        data.get("resumen") or "",
+        " ".join(map(str, data.get("key_insights") or [])),
+        " ".join(taxonomy.keywords),
+    ]
+    return " ".join(map(str, parts)).lower()
+
+
+def _adjust_relevance(score: float, raw: dict[str, Any], data: dict[str, Any], taxonomy: TaxonomyValidation) -> float:
+    text = _score_text(raw, data, taxonomy)
+    has_core = _contains_any(text, CORE_SIGNAL_TERMS)
+    has_geo = _contains_any(text, SPAIN_EUROPE_TERMS)
+    has_generic = _contains_any(text, GENERIC_NEWS_TERMS)
+    secondary = taxonomy.secondary_slug or ""
+    primary = taxonomy.primary_slug or ""
+
+    if has_core:
+        score += 0.08
+    if has_geo:
+        score += 0.04
+    if secondary in {"ooh-dooh", "programmatic", "adtech", "ai-advertising", "retail-media", "audience-measurement", "attribution", "market-research", "adspend"}:
+        score += 0.06
+    if secondary == "industry-news" and not (has_core or has_geo):
+        score = min(score, 0.55)
+    if has_generic and not (has_core or has_geo):
+        score = min(score - 0.12, 0.55)
+    if primary in {"creative-content", "consumer-behavior"} and not (has_core or has_geo):
+        score = min(score, 0.65)
+    return max(0.0, min(1.0, round(score, 2)))
+
+
 def _to_analyzed_item(
     data: dict[str, Any],
     raw: dict[str, Any],
@@ -306,6 +366,9 @@ def _to_analyzed_item(
     published_at: datetime | None = None,
 ) -> AnalyzedItem:
     insights = [str(i) for i in (data.get("key_insights") or []) if str(i).strip()][:5]
+    relevance_score = _clamp01(data.get("relevance_score")) or 0.5
+    relevance_score = _adjust_relevance(relevance_score, raw, data, taxonomy)
+
     return AnalyzedItem(
         raw_item_id=UUID(raw["id"]),
         title=raw.get("title") or "",
@@ -315,7 +378,7 @@ def _to_analyzed_item(
         primary_slug=taxonomy.primary_slug,
         secondary_slug=taxonomy.secondary_slug,
         keywords=taxonomy.keywords,
-        relevance_score=_clamp01(data.get("relevance_score")) or 0.5,
+        relevance_score=relevance_score,
         novelty_score=_clamp01(data.get("novelty_score")),
         raw_analysis=data,
         model_used=MODEL,
