@@ -67,6 +67,7 @@ jobs:
     name: "RSS Fetcher"
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    if: github.event_name != 'workflow_dispatch' || inputs.manual_urls == ''
 
     steps:
       - name: Checkout
@@ -131,7 +132,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [fetch-rss, import-manual-urls]
-    if: always() && needs.fetch-rss.result == 'success' && (needs.import-manual-urls.result == 'success' || needs.import-manual-urls.result == 'skipped')
+    if: always() && ((needs.fetch-rss.result == 'success' && needs.import-manual-urls.result == 'skipped') || (needs.fetch-rss.result == 'skipped' && needs.import-manual-urls.result == 'success'))
 
     steps:
       - name: Checkout
@@ -158,6 +159,7 @@ jobs:
           MAX_AGE_DAYS:               "7"
           MAX_ITEMS_PER_RUN:          "60"
           CURATION_MIN_RELEVANCE:     "0.60"
+          ANALYZE_SOURCE_NAME:        ${{ github.event_name == 'workflow_dispatch' && inputs.manual_urls != '' && 'Manual URLs' || '' }}
           GITHUB_RUN_ID:              ${{ github.run_id }}
         run: |
           python -m analysis.analyzer 2>&1 | tee analyzer.log
@@ -192,8 +194,8 @@ jobs:
     name: "Send Daily Digest Email"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [fetch-rss, analyze]
-    if: always() && needs.fetch-rss.result == 'success' && needs.analyze.result != 'cancelled'
+    needs: [fetch-rss, import-manual-urls, analyze]
+    if: always() && needs.analyze.result == 'success'
 
     steps:
       - name: Checkout

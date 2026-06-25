@@ -26,6 +26,7 @@ from db.client import (
     AnalyzedItem,
     get_client,
     get_raw_items_pending_analysis,
+    get_source_by_name,
     insert_analyzed_item,
     update_raw_item_status,
 )
@@ -41,6 +42,7 @@ MAX_ITEMS_PER_RUN = int(os.getenv("MAX_ITEMS_PER_RUN", "60"))
 CURATION_MIN_RELEVANCE = float(os.getenv("CURATION_MIN_RELEVANCE", "0.6"))
 MODEL        = "gpt-4o-mini"
 REQUIRE_VALID_TAXONOMY = os.getenv("REQUIRE_VALID_TAXONOMY", "true").lower() == "true"
+ANALYZE_SOURCE_NAME = os.getenv("ANALYZE_SOURCE_NAME", "").strip()
 
 MAX_CONTENT_WORDS = 1_500
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -467,7 +469,7 @@ def process_item(raw: dict[str, Any], oai: OpenAI, db: Any) -> bool:
 
 
 
-def run_all(oai: OpenAI, db: Any) -> None:
+def run_all(oai: OpenAI, db: Any, source_id: str | None = None) -> None:
     total_ok = total_fail = batch_n = total_seen = 0
 
     while True:
@@ -479,7 +481,10 @@ def run_all(oai: OpenAI, db: Any) -> None:
                 log.info("max_items_per_run_reached", limit=MAX_ITEMS_PER_RUN)
                 break
             items = get_raw_items_pending_analysis(
-                db, limit=min(BATCH_SIZE, remaining), max_age_days=MAX_AGE_DAYS
+                db,
+                limit=min(BATCH_SIZE, remaining),
+                max_age_days=MAX_AGE_DAYS,
+                source_id=source_id,
             )
 
         if not items:
@@ -561,12 +566,23 @@ def main() -> None:
         curation_min_relevance=CURATION_MIN_RELEVANCE,
         model=MODEL,
         require_valid_taxonomy=REQUIRE_VALID_TAXONOMY,
+        analyze_source_name=ANALYZE_SOURCE_NAME or None,
     )
 
     oai = _openai()
     db  = get_client() if not DRY_RUN else None
 
-    run_all(oai, db)
+    source_id = None
+    if db and ANALYZE_SOURCE_NAME:
+        source = get_source_by_name(db, ANALYZE_SOURCE_NAME)
+        if not source:
+            log.warning("analyze_source_not_found", source_name=ANALYZE_SOURCE_NAME)
+            log.info("analyzer_done", batches=0, total_ok=0, total_failed=0)
+            return
+        source_id = source["id"]
+        log.info("analyze_source_filter", source_name=ANALYZE_SOURCE_NAME, source_id=source_id)
+
+    run_all(oai, db, source_id=source_id)
 
 
 if __name__ == "__main__":

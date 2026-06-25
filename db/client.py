@@ -113,19 +113,23 @@ def upsert_raw_items(db: Client, items: list[RawItem]) -> list[dict[str, Any]]:
 
 
 def get_raw_items_pending_analysis(
-    db: Client, limit: int = 50, max_age_days: int = 7
+    db: Client,
+    limit: int = 50,
+    max_age_days: int = 7,
+    source_id: str | None = None,
 ) -> list[dict[str, Any]]:
     from datetime import timedelta
     cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
-    result = (
+    query = (
         db.table("raw_items")
         .select("*")
         .eq("status", "raw")
         .gte("created_at", cutoff)
-        .order("published_at", desc=True)
-        .limit(limit)
-        .execute()
     )
+    if source_id:
+        query = query.eq("source_id", source_id)
+    query = query.order("published_at", desc=True).limit(limit)
+    result = query.execute()
     return result.data or []
 
 
