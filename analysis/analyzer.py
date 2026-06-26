@@ -183,11 +183,22 @@ USER_PROMPT_TEMPLATE = """\
 Analiza el siguiente artículo y devuelve un JSON con esta estructura exacta:
 
 {{
-  "resumen": "string — resumen claro en 2-3 frases (máx 60 palabras)",
+  "resumen": "string — 2-3 frases ejecutivas (máx 60 palabras)",
   "key_insights": ["string", "string", "string"],
+  "topics": ["string", "string"],
   "primary_slug": "string — UNO del catálogo de primarios",
   "secondary_slug": "string — UNO de los secundarios del primario elegido",
   "keywords": ["keyword_type/keyword_slug", "keyword_type/keyword_slug"],
+  "sentiment": "positive|negative|neutral|mixed",
+  "content_type": "article|study|press-release|opinion|case-study|report|interview|news|analysis",
+  "entities": ["Empresa/Persona/Organización", "..."],
+  "linkedin_angle": "string — ángulo/hook concreto en 1-2 frases para comentar en LinkedIn",
+  "narrative_type": "data-story|announcement|opinion|case-study|trend|research|regulatory",
+  "kpi_primary_value": null,
+  "kpi_primary_unit": null,
+  "kpi_primary_claim": null,
+  "data_strength": 0.0,
+  "brand_relevance": 0.0,
   "relevance_score": 0.0,
   "novelty_score": 0.0
 }}
@@ -195,11 +206,21 @@ Analiza el siguiente artículo y devuelve un JSON con esta estructura exacta:
 Reglas:
 - resumen: 2-3 frases, ejecutivo y concreto. Si citas una cifra, identifica la fuente.
 - key_insights: exactamente 3 puntos clave (frases breves).
+- topics: 2-5 temas libres en español, más granulares que keywords (ej: "Inversión DOOH España").
 - primary_slug / secondary_slug: SIEMPRE asigna; el más cercano del catálogo. Null/vacío PROHIBIDO.
 - keywords: 3-8 items con formato {{keyword_type}}/{{keyword_slug}}; minúsculas y guiones.
+- sentiment: tono general del artículo.
+- content_type: tipo de pieza de contenido.
+- entities: hasta 8 entidades nombradas clave (empresas, personas, organizaciones). Solo las más relevantes.
+- linkedin_angle: el ángulo más potente para un post LinkedIn desde perspectiva OOH/DOOH/adtech.
+- narrative_type: estructura narrativa predominante.
+- kpi_primary_value: número principal del artículo (ej: 18.5). null si no hay cifra clara.
+- kpi_primary_unit: unidad del KPI (ej: "%", "€M", "millones"). null si no aplica.
+- kpi_primary_claim: qué mide la cifra (ej: "crecimiento inversión DOOH 2025"). null si no aplica.
+- data_strength (0-1): respaldo empírico. 1.0 = estudio con cifras; 0.5 = noticia con datos; 0.0 = opinión sin datos.
+- brand_relevance (0-1): relevancia directa para el trabajo diario del profesional OOH/DOOH/adtech.
 - relevance_score (0-1): según las reglas del system prompt.
-- novelty_score (0-1): qué tan FRESCA es la noticia/dato. 1.0 = noticia/dato de hoy; \
-0.7 = dato nuevo de un tema conocido; 0.3 = tema ya muy circulado; 0.0 = atemporal.
+- novelty_score (0-1): frescura. 1.0 = noticia de hoy; 0.7 = dato nuevo de tema conocido; 0.3 = tema ya circulado; 0.0 = atemporal.
 
 ARTÍCULO:
 Título: {title}
@@ -231,7 +252,7 @@ def call_analysis(client: OpenAI, prompt: str) -> tuple[dict[str, Any], int]:
             {"role": "user",   "content": prompt},
         ],
         temperature=0.2,
-        max_tokens=600,
+        max_tokens=900,
     )
     raw = response.choices[0].message.content or "{}"
     tokens = response.usage.total_tokens if response.usage else 0
@@ -360,6 +381,12 @@ def _adjust_relevance(score: float, raw: dict[str, Any], data: dict[str, Any], t
     return max(0.0, min(1.0, round(score, 2)))
 
 
+def _clean_str_list(value: Any, max_items: int = 8) -> list[str]:
+    if not value or not isinstance(value, list):
+        return []
+    return [str(v).strip() for v in value if str(v).strip()][:max_items]
+
+
 def _to_analyzed_item(
     data: dict[str, Any],
     raw: dict[str, Any],
@@ -370,6 +397,12 @@ def _to_analyzed_item(
     insights = [str(i) for i in (data.get("key_insights") or []) if str(i).strip()][:5]
     relevance_score = _clamp01(data.get("relevance_score")) or 0.5
     relevance_score = _adjust_relevance(relevance_score, raw, data, taxonomy)
+
+    kpi_value = data.get("kpi_primary_value")
+    try:
+        kpi_value = float(kpi_value) if kpi_value is not None else None
+    except (TypeError, ValueError):
+        kpi_value = None
 
     return AnalyzedItem(
         raw_item_id=UUID(raw["id"]),
@@ -386,6 +419,17 @@ def _to_analyzed_item(
         model_used=MODEL,
         tokens_used=tokens,
         published_at=published_at,
+        topics=_clean_str_list(data.get("topics"), max_items=5),
+        sentiment=str(data.get("sentiment") or "").strip().lower() or None,
+        content_type=str(data.get("content_type") or "").strip().lower() or None,
+        entities=_clean_str_list(data.get("entities"), max_items=8),
+        linkedin_angle=str(data.get("linkedin_angle") or "").strip() or None,
+        narrative_type=str(data.get("narrative_type") or "").strip().lower() or None,
+        kpi_primary_value=kpi_value,
+        kpi_primary_unit=str(data.get("kpi_primary_unit") or "").strip() or None,
+        kpi_primary_claim=str(data.get("kpi_primary_claim") or "").strip() or None,
+        data_strength=_clamp01(data.get("data_strength")),
+        brand_relevance=_clamp01(data.get("brand_relevance")),
     )
 
 
@@ -450,6 +494,14 @@ def process_item(raw: dict[str, Any], oai: OpenAI, db: Any) -> bool:
                  keywords=taxonomy.keywords[:4],
                  relevance=data.get("relevance_score"),
                  novelty=data.get("novelty_score"),
+                 sentiment=data.get("sentiment"),
+                 content_type=data.get("content_type"),
+                 narrative_type=data.get("narrative_type"),
+                 brand_relevance=data.get("brand_relevance"),
+                 data_strength=data.get("data_strength"),
+                 kpi_value=data.get("kpi_primary_value"),
+                 kpi_unit=data.get("kpi_primary_unit"),
+                 linkedin_angle=(data.get("linkedin_angle") or "")[:80],
                  tokens=tokens)
         return True
 

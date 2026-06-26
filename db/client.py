@@ -62,11 +62,21 @@ class AnalyzedItem:
     model_used: str = "gpt-4o-mini"
     tokens_used: int | None = None
     published_at: datetime | None = None  # fecha de publicación original del raw_item
+    topics: list[str] = field(default_factory=list)
+    sentiment: str | None = None
+    content_type: str | None = None
+    entities: list[str] = field(default_factory=list)
+    linkedin_angle: str | None = None
+    narrative_type: str | None = None
+    kpi_primary_value: float | None = None
+    kpi_primary_unit: str | None = None
+    kpi_primary_claim: str | None = None
+    data_strength: float | None = None
+    brand_relevance: float | None = None
 
     def to_db_dict(self) -> dict[str, Any]:
         return {
             "raw_item_id": str(self.raw_item_id),
-            "title": self.title,
             "url": self.url,
             "summary": self.summary,
             "key_insights": self.key_insights,
@@ -80,6 +90,17 @@ class AnalyzedItem:
             "tokens_used": self.tokens_used,
             "created_at": self.published_at.isoformat() if self.published_at else None,
             "analyzed_at": _now_iso(),
+            "topics": self.topics,
+            "sentiment": self.sentiment,
+            "content_type": self.content_type,
+            "entities": self.entities,
+            "linkedin_angle": self.linkedin_angle,
+            "narrative_type": self.narrative_type,
+            "kpi_primary_value": self.kpi_primary_value,
+            "kpi_primary_unit": self.kpi_primary_unit,
+            "kpi_primary_claim": self.kpi_primary_claim,
+            "data_strength": round(float(self.data_strength), 2) if self.data_strength is not None else None,
+            "brand_relevance": round(float(self.brand_relevance), 2) if self.brand_relevance is not None else None,
         }
 
 
